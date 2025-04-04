@@ -39,6 +39,6 @@ console_handler.setFormatter(formatter)
 
 # config
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG if constants.APP_ENV == 'development' else logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
