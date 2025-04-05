@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from api.routes import router
 import utils.constants as constants
 from fastapi.responses import JSONResponse
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from utils.helpers.api_logger import api_logger_middleware
 
@@ -15,6 +16,10 @@ app.add_middleware(
 )
 
 app.add_middleware(api_logger_middleware)
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/redoc")
 
 @app.get('/site/status')
 async def get_site_status():
