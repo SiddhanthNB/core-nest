@@ -20,7 +20,7 @@ logger.debug("Starting to load models...")
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 logger.debug("SentenceTransformer model loaded successfully.")
 
-summarizer_model = pipeline("summarization", model="Falconsai/text_summarization")
+summarizer_model = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
 logger.debug("Summarization model loaded successfully.")
 
 logger.debug("Model loading completed.")
