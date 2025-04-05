@@ -10,9 +10,9 @@ from utils.helpers.api_logger import api_logger_middleware
 app = FastAPI()
 
 app.add_middleware(
-  CORSMiddleware,
-  allow_origin_regex = r'',
-  allow_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+	CORSMiddleware,
+	allow_origin_regex = r'',
+	allow_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 )
 
 app.add_middleware(api_logger_middleware)
@@ -23,7 +23,7 @@ async def root():
 
 @app.get('/site/status')
 async def get_site_status():
-  return JSONResponse(content={ 'success': True }, status_code=200)
+  	return JSONResponse(content={ 'success': True }, status_code=200)
 
 app.include_router(router)
 
