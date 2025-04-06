@@ -21,9 +21,9 @@ app.add_middleware(api_logger_middleware)
 async def root():
     return RedirectResponse(url="/redoc")
 
-@app.get('/site/status')
-async def get_site_status():
-  	return JSONResponse(content={ 'success': True }, status_code=200)
+@app.get("/ping")
+async def ping():
+    return JSONResponse(content='pong', status_code=200)
 
 app.include_router(router)
 
