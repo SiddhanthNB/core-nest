@@ -8,11 +8,11 @@ from sentence_transformers import SentenceTransformer
 from fastapi import APIRouter, HTTPException, Header, Body
 from api.controllers.completion_controller import CompletionController
 from api.controllers.embeddings_controller import EmbeddingsController
-from api.controllers.summarization_controller import SummarizationController
+# from api.controllers.summarization_controller import SummarizationController
 from api.controllers.sentiment_controller import SentimentController
 from api.validators.completion_validator import CompletionValidator
 from api.validators.embedding_validator import EmbeddingValidator
-from api.validators.summarization_validator import SummarizationValidator
+# from api.validators.summarization_validator import SummarizationValidator
 from api.validators.sentiment_validator import SentimentValidator
 
 logger.debug("Starting to load models...")
@@ -40,19 +40,7 @@ async def get_generated_content(params: CompletionValidator = Body(...), auth: s
         status_code = e.status_code if isinstance(e, HTTPException) else 500
         content = e.detail if isinstance(e, HTTPException) else 'Internal Server Error'
         return JSONResponse(content=content, status_code=status_code)
-    
-@router.get('/summarize')
-async def get_summarization(params: SummarizationValidator = Body(...), auth: str = Header(...)):
-    try:
-        controller = SummarizationController(auth)
-        response = await controller.dispatch(params, summarizer_model)
-        return JSONResponse(content=response, status_code=200)
-    except Exception as e:
-        logger.error(f'Error: {str(e)}', exc_info=True)
-        status_code = e.status_code if isinstance(e, HTTPException) else 500
-        content = e.detail if isinstance(e, HTTPException) else 'Internal Server Error'
-        return JSONResponse(content=content, status_code=status_code)
-    
+
 @router.get('/embed')
 async def get_vector_embeddings(params: EmbeddingValidator = Body(...), auth: str = Header(...)):
     try:
@@ -64,7 +52,7 @@ async def get_vector_embeddings(params: EmbeddingValidator = Body(...), auth: st
         status_code = e.status_code if isinstance(e, HTTPException) else 500
         content = e.detail if isinstance(e, HTTPException) else 'Internal Server Error'
         return JSONResponse(content=content, status_code=status_code)
-    
+
 @router.get('/sentiment')
 async def get_sentiment_analysis(params: SentimentValidator = Body(...), auth: str = Header(...)):
     try:
