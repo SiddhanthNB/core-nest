@@ -27,7 +27,12 @@ class CompletionController(ApiController):
                 response = await service.get_response(params)
                 if response:
                     logger.debug(f'Response generation successful with provider: {provider_name}')
-                    return { 'success': True, 'result': response }
+                    payload = {
+                        'model': service.model_name,
+                        'provider': provider_name,
+                        'content': response
+                    }
+                    return { 'success': True, 'result': payload }
                 else:
                     raise HTTPException(status_code=500, detail="Did not receive expected json response from the api call")
             except Exception as e:
