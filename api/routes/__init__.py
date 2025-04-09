@@ -3,7 +3,6 @@ nltk.download("vader_lexicon")
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from config.logger import logger
 from fastapi.responses import JSONResponse
-from transformers import pipeline
 from sentence_transformers import SentenceTransformer
 from fastapi import APIRouter, HTTPException, Header, Body
 from api.controllers.completion_controller import CompletionController
@@ -19,9 +18,6 @@ logger.debug("Starting to load models...")
 
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 logger.debug("SentenceTransformer model loaded successfully.")
-
-summarizer_model = pipeline("summarization", model="Falconsai/text_summarization")
-logger.debug("Summarization model loaded successfully.")
 
 logger.debug("Model loading completed.")
 
