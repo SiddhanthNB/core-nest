@@ -13,11 +13,11 @@ class ApiController:
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail='Invalid header structure')
 
-        if not auth:
+        if (not auth) or ('client-name' not in auth) or ('client-id' not in auth) or ('client-secret' not in auth):
             raise HTTPException(status_code=400, detail='Mandatory header missing')
-        
+
         if auth['client-name'] not in self.valid_apps:
             raise HTTPException(status_code=401, detail='Who are you?')
-        
+
         if (auth['client-id'] != constants.CLIENT_ID) or (auth['client-secret'] != constants.CLIENT_SECRET):
             raise HTTPException(status_code=401, detail='Authentication failed')
