@@ -1,27 +1,13 @@
-import nltk
-nltk.download("vader_lexicon")
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from config.logger import logger
 from fastapi.responses import JSONResponse
-from sentence_transformers import SentenceTransformer
+from utils.helpers.model_loader import get_embedding_model, get_sentiment_analyzer
 from fastapi import APIRouter, HTTPException, Header, Body
 from api.controllers.completion_controller import CompletionController
 from api.controllers.embeddings_controller import EmbeddingsController
-# from api.controllers.summarization_controller import SummarizationController
 from api.controllers.sentiment_controller import SentimentController
 from api.validators.completion_validator import CompletionValidator
 from api.validators.embedding_validator import EmbeddingValidator
-# from api.validators.summarization_validator import SummarizationValidator
 from api.validators.sentiment_validator import SentimentValidator
-
-logger.debug("Starting to load models...")
-
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-logger.debug("SentenceTransformer model loaded successfully.")
-
-logger.debug("Model loading completed.")
-
-analyzer = SentimentIntensityAnalyzer()
 
 router = APIRouter()
 
@@ -41,7 +27,7 @@ async def get_generated_content(params: CompletionValidator = Body(...), auth: s
 async def get_vector_embeddings(params: EmbeddingValidator = Body(...), auth: str = Header(...)):
     try:
         controller = EmbeddingsController(auth)
-        response = await controller.dispatch(params, embedding_model)
+        response = await controller.dispatch(params, get_embedding_model())
         return JSONResponse(content=response, status_code=200)
     except Exception as e:
         logger.error(f'Error: {str(e)}', exc_info=True)
@@ -53,7 +39,7 @@ async def get_vector_embeddings(params: EmbeddingValidator = Body(...), auth: st
 async def get_sentiment_analysis(params: SentimentValidator = Body(...), auth: str = Header(...)):
     try:
         controller = SentimentController(auth)
-        response = await controller.dispatch(params, analyzer)
+        response = await controller.dispatch(params, get_sentiment_analyzer())
         return JSONResponse(content=response, status_code=200)
     except Exception as e:
         logger.error(f'Error: {str(e)}', exc_info=True)
