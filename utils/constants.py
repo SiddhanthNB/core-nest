@@ -2,6 +2,7 @@ import os
 import yaml
 from dotenv import load_dotenv
 from fastapi import HTTPException
+from urllib.parse import quote_plus
 
 load_dotenv()
 
@@ -23,3 +24,6 @@ except Exception as e:
     raise HTTPException(status_code=500, detail=f'Error reading config file: {e}')
 
 SERVICES = _settings['services']
+
+SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
+SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL').replace('[YOUR-PASSWORD]', quote_plus(SUPABASE_DB_PASSWORD))
