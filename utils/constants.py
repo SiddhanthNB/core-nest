@@ -8,6 +8,8 @@ load_dotenv()
 
 APP_ENV = os.getenv('APP_ENV', 'production')
 APP_PORT = os.getenv('APP_PORT', 3000)
+PROJECT_NAME = 'spotilens'
+
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 
