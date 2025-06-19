@@ -41,7 +41,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             # Log outgoing response
             response_metadata['success']      = response.status_code < 400
             response_metadata['status_code']  = response.status_code
-            response_metadata['process_time'] = f'{process_time:.2f} seconds'
+            response_metadata['process_time'] = f'{process_time:.2f} ms'
             logger.info(f'Outgoing response: {response_metadata}')
 
             asyncio.create_task(self._push_log_into_db(process_time, request_headers, request_metadata, response_metadata))

@@ -4,7 +4,7 @@ from sentence_transformers import SentenceTransformer
 
 logger.debug("Starting to load models...")
 
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device='cpu')
 logger.debug("SentenceTransformer model loaded successfully.")
 
 # summarizer_model = pipeline("summarization", model="Falconsai/text_summarization")
