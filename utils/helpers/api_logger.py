@@ -7,6 +7,7 @@ from config.logger import logger
 import utils.constants as constants
 from db.models.api_logs import APILog
 from starlette.responses import Response
+from config.postgres import close_session
 from starlette.middleware.base import BaseHTTPMiddleware
 
 class _APILoggerMiddleware(BaseHTTPMiddleware):
@@ -68,5 +69,6 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             'auth_headers': json.loads(request_headers.get('auth', 'null')),
         }
         APILog.create_record(payload)
+        close_session()
 
 api_logger_middleware = _APILoggerMiddleware

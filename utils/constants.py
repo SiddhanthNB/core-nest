@@ -8,10 +8,13 @@ load_dotenv()
 
 APP_ENV = os.getenv('APP_ENV', 'production')
 APP_PORT = os.getenv('APP_PORT', 3000)
-PROJECT_NAME = 'spotilens'
+PROJECT_NAME = 'corenest'
 
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
+
+SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
+SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL').replace('[YOUR-PASSWORD]', quote_plus(SUPABASE_DB_PASSWORD))
 
 try:
     with open('utils/inference_providers/providers.yaml', 'r') as f:
@@ -26,6 +29,3 @@ except Exception as e:
     raise HTTPException(status_code=500, detail=f'Error reading config file: {e}')
 
 SERVICES = _settings['services']
-
-SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
-SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL').replace('[YOUR-PASSWORD]', quote_plus(SUPABASE_DB_PASSWORD))

@@ -5,7 +5,7 @@ import utils.constants as constants
 from logging.handlers import TimedRotatingFileHandler
 
 def _get_file_path(timestamp: str) -> str:
-    return os.path.join(log_dir, f"corenest-api.{timestamp}.log")
+    return os.path.join(log_dir, f"{constants.PROJECT_NAME}.{timestamp}.log")
 
 def _custom_namer(default_name: str) -> str:
   try:

@@ -1,13 +1,33 @@
 from config.logger import logger
 import utils.constants as constants
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, scoped_session
 
-_engine = create_engine(constants.SUPABASE_DB_URL, echo=constants.APP_ENV == 'development', pool_size=5, pool_recycle=3600, max_overflow=10)
+_engine = create_engine(
+	constants.SUPABASE_DB_URL,
+	echo=constants.APP_ENV == 'development',
+	pool_size=5,
+	pool_recycle=3600,
+	max_overflow=10,
+	pool_pre_ping=True,
+	pool_timeout=30,
+	connect_args={
+		"connect_timeout": 10,
+		"application_name": constants.PROJECT_NAME
+	}
+)
 
-def get_session():
-	logger.info(f"Creating a new session with Postgres...")
-	return sessionmaker(bind = _engine)
+db_session = scoped_session(sessionmaker(bind=_engine))
+
+def close_session():
+	try:
+		db_session.remove()
+	except Exception as e:
+		logger.warning(f"Error during session cleanup (this is usually harmless): {e}")
+		try:
+			db_session.registry.clear()
+		except Exception:
+			pass
 
 def execute_query(raw_query, params = None):
 	res = { 'rows': [], 'columns': [] }
