@@ -8,6 +8,7 @@
 - [ ] extend ONNX for summarizer model possibility - or else go with traditional methods
 - [ ] add param-based inference APIs for embed endpoint
 - [ ] improve sentiment analysis endpoint
+- [ ] move DB ops to async
 
 ## In Progress
 - [ ] optimise model loading
