@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime
-from app.utils import constants
+import app.utils.constants as constants
 from logging.handlers import TimedRotatingFileHandler
 
 def _get_file_path(timestamp: str) -> str:
@@ -39,6 +39,6 @@ console_handler.setFormatter(formatter)
 
 # config
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(file_handler)
+logger.setLevel(logging.INFO if constants.APP_ENV.lower() == 'production' else logging.DEBUG)
+# logger.addHandler(file_handler)
 logger.addHandler(console_handler)

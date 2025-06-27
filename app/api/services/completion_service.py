@@ -8,9 +8,8 @@ from app.adapters import OpenRouterAdapter
 
 class CompletionService(BaseApiService):
 
-    def __init__(self, auth):
+    def __init__(self):
         super().__init__()
-        self.auth_token_validator(auth)
 
     async def dispatch(self, params):
         _providers_hash = {

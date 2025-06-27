@@ -4,7 +4,7 @@ import asyncio
 from typing import Callable
 from fastapi import Request
 from app.config.logger import logger
-from app.utils import constants
+import app.utils.constants as constants
 from app.db.models.api_logs import APILog
 from starlette.responses import Response
 from app.config.postgres import close_session

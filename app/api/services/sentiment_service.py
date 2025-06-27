@@ -4,9 +4,8 @@ from .base_service import BaseApiService
 
 class SentimentService(BaseApiService):
 
-    def __init__(self, auth):
+    def __init__(self):
         super().__init__()
-        self.auth_token_validator(auth)
 
     async def dispatch(self, params, analyzer):
         try:

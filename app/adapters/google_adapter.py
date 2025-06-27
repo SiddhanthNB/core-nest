@@ -1,30 +1,86 @@
 import json
-import asyncio
+import httpx
 from fastapi import HTTPException
-from app.utils import constants
-import google.generativeai as genai
+import app.utils.constants as constants
 from .base_adapter import BaseAdapter
 
 class GoogleAdapter(BaseAdapter):
 
     def __init__(self):
         super().__init__()
-        self.model_name = constants.SERVICES['google']['model']
-        genai.configure(api_key=constants.SERVICES['google']['key'])
+        self.api_key = constants.SERVICES['google']['key']
+        self.model_name = constants.SERVICES['google']['generation']['model']
+        self.generation_url = constants.SERVICES['google']['generation']['url']
+        self.embedding_model = constants.SERVICES['google']['embedding']['model']
+        self.embedding_url = constants.SERVICES['google']['embedding']['url']
 
     async def generate_response(self, params):
-        model = genai.GenerativeModel(model_name=self.model_name, system_instruction=params.system_prompt)
-        response = await asyncio.to_thread(model.generate_content, params.user_prompt)
-        response = response.text
-        return self._response_parser(response) if params.structured_output else response
+        url = self.generation_url.replace("{MODEL_NAME}", self.model_name)
+        headers = {
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "contents": [
+                {
+                    "parts": [ { "text": params.user_prompt } ]
+                }
+            ]
+        }
+        if params.system_prompt:
+            payload["system_instruction"] = {
+                "parts": [
+                    {
+                        "text": params.system_prompt
+                    }
+                ]
+            }
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                json=payload,
+                params={"key": self.api_key}
+            )
+            response.raise_for_status()
+            data = response.json()
+            response_text = data["candidates"][0]["content"]["parts"][0]["text"]
 
-    async def generate_embeddings(self, params):
-        pass
+        return self.response_parser(response_text) if params.structured_output else response_text
 
-    def _response_parser(self, response):
-        text = response.strip()
-        if text.startswith("```json") and text.endswith("```"):
-            json_str = text[len("```json"): -len("```")].strip()
-            return json.loads(json_str)
-        else:
-            raise HTTPException(status_code=500, detail="Response is not in expected JSON format")
+    async def generate_embeddings(self, texts):
+        url = self.embedding_url.replace("{MODEL_NAME}", self.embedding_model)
+        headers = {
+            "Content-Type": "application/json"
+        }
+        requests = []
+        for text in texts:
+            requests.append({
+                "model": f"models/{self.embedding_model}",
+                "content": {
+                    "parts": [{"text": text}]
+                }
+            })
+        payload = {
+            "requests": requests
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                json=payload,
+                params={"key": self.api_key}
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            embeddings = [ result["embedding"]["values"] for result in data.get("embedding_batch_results", []) ]
+
+        return embeddings
+
+    # def _response_parser(self, response):
+    #     text = response.strip()
+    #     if text.startswith("```json") and text.endswith("```"):
+    #         json_str = text[len("```json"): -len("```")].strip()
+    #         return json.loads(json_str)
+    #     else:
+    #         raise HTTPException(status_code=500, detail="Response is not in expected JSON format")

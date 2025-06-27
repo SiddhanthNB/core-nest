@@ -1,11 +1,20 @@
 services:
   google:
     key: "{GOOGLE_API_KEY}"
-    model: "gemini-2.0-flash-lite"
+    generation:
+      model: "gemini-2.0-flash-lite"
+      url: "https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
+    embedding:
+      model: "text-embedding-004"
+      url: "https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:batchEmbedContents"
   openai:
     key: "{OPENAI_API_KEY}"
-    url: "https://api.openai.com/v1/chat/completions"
-    model: "gpt-4o-mini"
+    generation:
+      model: "gpt-4o-mini"
+      url: "https://api.openai.com/v1/chat/completions"
+    embedding:
+      model: "text-embedding-3-small"
+      url: "https://api.openai.com/v1/embeddings"
   huggingface:
     key: "{HUGGINGFACE_API_KEY}"
     url: "https://router.huggingface.co/together/v1/chat/completions"

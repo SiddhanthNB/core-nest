@@ -13,17 +13,12 @@ def create_app():
     app = FastAPI()
 
     # Add middleware
-    app.add_middleware(CORSMiddleware, allow_origin_regex=r'', allow_methods='*')
+    app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])
     app.add_middleware(api_logger_middleware)
 
     # Root routes
-    @app.get('/')
-    async def root():
-        return RedirectResponse(url='/redoc')
-
-    @app.get('/ping')
-    async def ping():
-        return JSONResponse(content='pong', status_code=200)
+    app.add_api_route('/', lambda: RedirectResponse(url='/redoc'), methods=['GET'])
+    app.add_api_route('/ping', lambda: JSONResponse(content='pong', status_code=200), methods=['GET'])
 
     # Include API routes
     app.include_router(router)

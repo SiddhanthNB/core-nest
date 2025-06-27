@@ -27,4 +27,5 @@ class HuggingfaceAdapter(BaseAdapter):
             response.raise_for_status()
             response = response.json()
             response = response["choices"][0]["message"]
-            return response
+
+        return response

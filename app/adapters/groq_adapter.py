@@ -27,4 +27,5 @@ class GroqAdapter(BaseAdapter):
             response.raise_for_status()
             response = response.json()
             response = response["choices"][0]["message"]["content"]
-            return self.response_parser(response) if params.structured_output else response
+
+        return self.response_parser(response) if params.structured_output else response

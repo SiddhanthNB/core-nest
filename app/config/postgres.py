@@ -1,5 +1,5 @@
 from app.config.logger import logger
-from app.utils import constants
+import app.utils.constants as constants
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 
