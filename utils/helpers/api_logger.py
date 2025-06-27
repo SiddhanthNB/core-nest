@@ -56,19 +56,25 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             return response
 
     async def _push_log_into_db(self, process_time, request_headers, request_metadata, response_metadata):
-        if constants.APP_ENV.lower() == 'development':
-            return
+        try:
+            if constants.APP_ENV.lower() == 'development':
+                return
 
-        payload = {
-            'process_time': process_time,
-            'path': request_metadata.get('path'),
-            'method': request_metadata.get('method'),
-            'rq_params': request_metadata.get('params'),
-            'success': response_metadata.get('success'),
-            'status_code': response_metadata.get('status_code'),
-            'auth_headers': json.loads(request_headers.get('auth', 'null')),
-        }
-        APILog.create_record(payload)
-        close_session()
+            payload = {
+                'process_time': process_time,
+                'path': request_metadata.get('path'),
+                'method': request_metadata.get('method'),
+                'rq_params': request_metadata.get('params'),
+                'success': response_metadata.get('success'),
+                'status_code': response_metadata.get('status_code'),
+                'auth_headers': json.loads(request_headers.get('auth', 'null')),
+            }
+
+            if (payload['path'] == '/ping') and (payload['method'].lower() == 'get'):
+                return
+
+            APILog.create_record(payload)
+        finally:
+            close_session()
 
 api_logger_middleware = _APILoggerMiddleware
