@@ -9,13 +9,12 @@ class GoogleAdapter(BaseAdapter):
     def __init__(self):
         super().__init__()
         self.api_key = constants.SERVICES['google']['key']
+        self.base_url = constants.SERVICES['google']['base_url']
         self.model_name = constants.SERVICES['google']['generation']['model']
-        self.generation_url = constants.SERVICES['google']['generation']['url']
         self.embedding_model = constants.SERVICES['google']['embedding']['model']
-        self.embedding_url = constants.SERVICES['google']['embedding']['url']
 
     async def generate_response(self, params):
-        url = self.generation_url.replace("{MODEL_NAME}", self.model_name)
+        url = f"{self.base_url}{self.model_name}{constants.SERVICES['google']['generation']['verb']}"
         headers = {
             "Content-Type": "application/json"
         }
@@ -48,7 +47,7 @@ class GoogleAdapter(BaseAdapter):
         return self.response_parser(response_text) if params.structured_output else response_text
 
     async def generate_embeddings(self, texts):
-        url = self.embedding_url.replace("{MODEL_NAME}", self.embedding_model)
+        url = f"{self.base_url}{self.model_name}{constants.SERVICES['google']['embedding']['verb']}"
         headers = {
             "Content-Type": "application/json"
         }

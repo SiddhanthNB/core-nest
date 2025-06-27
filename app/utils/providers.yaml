@@ -1,12 +1,13 @@
 services:
   google:
     key: "{GOOGLE_API_KEY}"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/models/"
     generation:
       model: "gemini-2.0-flash-lite"
-      url: "https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
+      verb: ":generateContent"
     embedding:
       model: "text-embedding-004"
-      url: "https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:batchEmbedContents"
+      verb: ":batchEmbedContents"
   openai:
     key: "{OPENAI_API_KEY}"
     generation:
