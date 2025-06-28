@@ -1,3 +1,4 @@
+from pathlib import Path
 from fastapi import HTTPException
 from app.config.logger import logger
 from app.adapters import GoogleAdapter
@@ -47,3 +48,15 @@ class BaseApiService:
                 continue
 
         raise HTTPException(status_code=503, detail="Failed to generate embeddings: No response from any provider")
+
+    def _get_prompts(self, prompt_type: str, **kwargs):
+        base_path = Path(__file__).parent.parent.parent / "utils" / "prompts"
+        system_prompts = base_path / "system_prompts"
+        user_prompts = base_path / "user_prompts"
+
+        _load_and_format = lambda file_path, **kwargs: file_path.read_text().strip().format(**kwargs)
+
+        system_prompt = _load_and_format(system_prompts / f"{prompt_type}.txt", **kwargs)
+        user_prompt = _load_and_format(user_prompts / f"{prompt_type}.txt", **kwargs)
+
+        return { 'system_prompt': system_prompt, 'user_prompt': user_prompt }

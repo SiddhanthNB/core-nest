@@ -1,4 +1,3 @@
-from app.config.logger import logger
 from .base_service import BaseApiService
 
 class SummarizationService(BaseApiService):
@@ -7,8 +6,8 @@ class SummarizationService(BaseApiService):
         super().__init__()
 
     async def dispatch(self, params):
-        try:
-            pass
-        except Exception as e:
-            logger.error(f'Error while creating embeddings: {str(e)}', exc_info=True)
-            raise
+        prompts = self._get_prompts('summarization', text=params.text)
+        params.system_prompt = prompts['system_prompt']
+        params.user_prompt = prompts['user_prompt']
+        payload = await self._generate_response_with_fallback(params)
+        return { 'success': True, 'result': payload }
