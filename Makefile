@@ -8,9 +8,7 @@ ALEMBIC_PATH := app/db/migrations
 install_dependencies:
 	@echo "Upgrading pip..."
 	@$(PIP) install --upgrade pip
-	@echo "Installing torch-cpu..."
-	@$(PIP) install torch==2.7.1+cpu --index-url https://download.pytorch.org/whl/cpu
-	@echo "Installing other dependencies..."
+	@echo "Installing dependencies..."
 	@$(PIP) install -r requirements.txt
 	@echo "Done"
 
