@@ -8,7 +8,7 @@ class OpenRouterAdapter(BaseAdapter):
         super().__init__()
         self._api_key = constants.SERVICES["openrouter"]["key"]
         self._url = constants.SERVICES["openrouter"]["url"]
-        self.model_name = constants.SERVICES["openrouter"]["model"]
+        self.generation_model = constants.SERVICES["openrouter"]["model"]
 
     async def generate_response(self, params):
         headers = {
@@ -16,7 +16,7 @@ class OpenRouterAdapter(BaseAdapter):
             "Authorization": f"Bearer {self._api_key}"
         }
         payload = {
-            "model": self.model_name,
+            "model": self.generation_model,
             "messages": [
                 {"role": "system", "content": params.system_prompt},
                 {"role": "user", "content": params.user_prompt}

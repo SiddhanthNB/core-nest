@@ -2,11 +2,11 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 class SummarizationSchema(BaseModel):
-    corpus: str = Field(..., description="Text corpus to be summarized")
+    text: str = Field(..., description="Text text to be summarized")
 
-    @field_validator("corpus")
+    @field_validator("text")
     @classmethod
-    def validate_corpus(cls, v):
+    def validate_text(cls, v):
         if not v or not v.strip():
-            raise HTTPException(status_code=400, detail="'corpus' cannot be empty or blank")
+            raise HTTPException(status_code=400, detail="'text' cannot be empty or blank")
         return v

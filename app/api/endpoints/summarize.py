@@ -1,16 +1,16 @@
 from app.config.logger import logger
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Depends
-from app.api.services import CompletionService
-from app.api.schemas import CompletionSchema
+from app.api.services import SummarizationService
+from app.api.schemas import SummarizationSchema
 from app.api.dependencies import validate_auth_token, get_db_session
 
-router = APIRouter(tags=["completion"])
+router = APIRouter(tags=["sentiment"])
 
-@router.post('/generate')
-async def generate_content(params: CompletionSchema, auth: dict = Depends(validate_auth_token), db_session = Depends(get_db_session)):
+@router.post('/sentiment')
+async def get_sentiment_analysis(params: SummarizationSchema, auth: dict = Depends(validate_auth_token), db_session = Depends(get_db_session)):
     try:
-        service = CompletionService()
+        service = SummarizationService()
         response = await service.dispatch(params)
         return JSONResponse(content=response, status_code=200)
     except Exception as e:

@@ -3,12 +3,12 @@ from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Depends
 from app.api.services import EmbeddingsService
 from app.api.schemas import EmbeddingSchema
-from app.api.dependencies import validate_auth_token
+from app.api.dependencies import validate_auth_token, get_db_session
 
 router = APIRouter(tags=["embeddings"])
 
 @router.post('/embed')
-async def get_vector_embeddings(params: EmbeddingSchema, auth_data: dict = Depends(validate_auth_token)):
+async def get_vector_embeddings(params: EmbeddingSchema, auth: dict = Depends(validate_auth_token), db_session = Depends(get_db_session)):
     try:
         service = EmbeddingsService()
         response = await service.dispatch(params)

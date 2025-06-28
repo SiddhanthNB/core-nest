@@ -7,7 +7,7 @@ class OpenAIAdapter(BaseAdapter):
     def __init__(self):
         super().__init__()
         self._api_key = constants.SERVICES["openai"]["key"]
-        self.model_name = constants.SERVICES["openai"]["generation"]["model"]
+        self.generation_model = constants.SERVICES["openai"]["generation"]["model"]
         self.generation_url = constants.SERVICES["openai"]["generation"]["url"]
         self.embedding_model = constants.SERVICES["openai"]["embedding"]["model"]
         self.embedding_url = constants.SERVICES["openai"]["embedding"]["url"]
@@ -18,7 +18,7 @@ class OpenAIAdapter(BaseAdapter):
             "Authorization": f"Bearer {self._api_key}"
         }
         payload = {
-            "model": self.model_name,
+            "model": self.generation_model,
             "messages": [
                 {"role": "system", "content": params.system_prompt},
                 {"role": "user", "content": params.user_prompt}
@@ -52,4 +52,4 @@ class OpenAIAdapter(BaseAdapter):
             response.raise_for_status()
             data = response.json()
 
-        return [item["embedding"] for item in data["data"]]
+        return [ item["embedding"] for item in data["data"] ]

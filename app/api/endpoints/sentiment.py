@@ -3,12 +3,12 @@ from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Depends
 from app.api.services import SentimentService
 from app.api.schemas import SentimentSchema
-from app.api.dependencies import validate_auth_token
+from app.api.dependencies import validate_auth_token, get_db_session
 
 router = APIRouter(tags=["sentiment"])
 
 @router.post('/sentiment')
-async def get_sentiment_analysis(params: SentimentSchema, auth: dict = Depends(validate_auth_token)):
+async def get_sentiment_analysis(params: SentimentSchema, auth: dict = Depends(validate_auth_token), db_session = Depends(get_db_session)):
     try:
         service = SentimentService()
         response = await service.dispatch(params)

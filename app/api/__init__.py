@@ -7,10 +7,11 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.endpoints import router
 from app.utils.helpers.api_logger import api_logger_middleware
+from app.utils.helpers.fastapi_lifespan import lifespan
 
 def create_app():
     """Create and configure FastAPI application"""
-    app = FastAPI()
+    app = FastAPI(lifespan=lifespan)
 
     # Add middleware
     app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])

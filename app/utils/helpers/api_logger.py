@@ -45,17 +45,16 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             response_metadata['process_time'] = f'{process_time:.2f} ms'
             logger.info(f'Outgoing response: {response_metadata}')
 
-            asyncio.create_task(self._push_log_into_db(process_time, request_headers, request_metadata, response_metadata))
+            asyncio.to_thread(self._push_log_into_db, process_time, request_headers, request_metadata, response_metadata)
 
             return response
-
         except Exception as e:
             logger.error(f'Error during API logging: {str(e)}', exc_info=True)
             response = await call_next(request) if response is None else response
 
             return response
 
-    async def _push_log_into_db(self, process_time, request_headers, request_metadata, response_metadata):
+    def _push_log_into_db(self, process_time, request_headers, request_metadata, response_metadata):
         try:
             if constants.APP_ENV.lower() == 'development':
                 return
@@ -74,6 +73,9 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
                 return
 
             APILog.create_record(payload)
+        except Exception as e:
+            logger.error(f'Error saving API log to database: {str(e)}', exc_info=True)
+            raise
         finally:
             close_session()
 
