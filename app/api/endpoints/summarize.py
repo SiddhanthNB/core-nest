@@ -5,10 +5,10 @@ from app.api.services import SummarizationService
 from app.api.schemas import SummarizationSchema
 from app.api.dependencies import validate_auth_token, get_db_session
 
-router = APIRouter(tags=["sentiment"])
+router = APIRouter(tags=["summarize"])
 
-@router.post('/sentiment')
-async def get_sentiment_analysis(params: SummarizationSchema, auth: dict = Depends(validate_auth_token), db_session = Depends(get_db_session)):
+@router.post('/summarize')
+async def get_summarization(params: SummarizationSchema, auth: dict = Depends(validate_auth_token), db_session = Depends(get_db_session)):
     try:
         service = SummarizationService()
         response = await service.dispatch(params)
