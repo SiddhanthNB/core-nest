@@ -1,5 +1,6 @@
 from pathlib import Path
 from fastapi import HTTPException
+from types import SimpleNamespace
 from app.config.logger import logger
 from app.adapters import GoogleAdapter
 from app.adapters import GroqAdapter
@@ -60,3 +61,6 @@ class BaseApiService:
         user_prompt = _load_and_format(user_prompts / f"{prompt_type}.txt", **kwargs)
 
         return { 'system_prompt': system_prompt, 'user_prompt': user_prompt }
+
+    def _get_all_params(self, params, prompts, structured_output=False):
+        return SimpleNamespace(**params.dict(), **prompts, structured_output=structured_output)
