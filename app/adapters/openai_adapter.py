@@ -33,7 +33,7 @@ class OpenAIAdapter(BaseAdapter):
         return self.response_parser(response) if params.structured_output else response
 
     async def generate_embeddings(self, texts):
-        """Generate embeddings using OpenAI's text-embedding-3-small model"""
+        """Generate embeddings using OpenAI's embedding model"""
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._api_key}"

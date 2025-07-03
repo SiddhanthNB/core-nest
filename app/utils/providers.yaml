@@ -14,7 +14,7 @@ services:
       model: "gpt-4o-mini"
       url: "https://api.openai.com/v1/chat/completions"
     embedding:
-      model: "text-embedding-ada-002"
+      model: "text-embedding-3-small"
       url: "https://api.openai.com/v1/embeddings"
   huggingface:
     key: "{HUGGINGFACE_API_KEY}"
