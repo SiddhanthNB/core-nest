@@ -1,20 +1,20 @@
 from app.config.logger import logger
 from fastapi.responses import JSONResponse
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from app.api.services import SummarizationService
 from app.api.schemas import SummarizationSchema
-from app.api.dependencies import validate_auth_token, get_db_session
+from app.api.dependencies import apply_rate_limiting
 
-router = APIRouter(tags=["summarize"])
+router = APIRouter(tags=["summarize"], dependencies=[Depends(apply_rate_limiting)])
 
 @router.post('/summarize')
-async def get_summarization(params: SummarizationSchema, auth: dict = Depends(validate_auth_token), db_session = Depends(get_db_session)):
+async def get_summarization(params: SummarizationSchema):
     try:
         service = SummarizationService()
         response = await service.dispatch(params)
-        return JSONResponse(content=response, status_code=200)
+        return JSONResponse(content=response, status_code=status.HTTP_200_OK)
     except Exception as e:
         logger.error(f'Error: {str(e)}', exc_info=True)
-        status_code = e.status_code if isinstance(e, HTTPException) else 500
+        status_code = e.status_code if isinstance(e, HTTPException) else status.HTTP_500_INTERNAL_SERVER_ERROR
         content = e.detail if isinstance(e, HTTPException) else 'Internal Server Error'
         return JSONResponse(content=content, status_code=status_code)

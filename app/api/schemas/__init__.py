@@ -4,8 +4,8 @@ from .sentiment_schemas import SentimentSchema
 from .summarization_schemas import SummarizationSchema
 
 __all__ = [
-    'CompletionSchema',
-    'EmbeddingSchema',
-    'SentimentSchema',
-    'SummarizationSchema'
+    "CompletionSchema",
+    "EmbeddingSchema",
+    "SentimentSchema",
+    "SummarizationSchema",
 ]

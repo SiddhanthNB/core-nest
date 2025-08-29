@@ -1,35 +1,42 @@
 import json
-from fastapi import HTTPException, Header
-import app.utils.constants as constants
+import hashlib
+from fastapi import Depends, HTTPException, status, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.db_session import get_db_session
+from app.config.redis import get_cache, set_cache, touch_cache
+from app.db.models import Client
+from app.api.schemas.client_schemas import ClientOut
 
-def validate_auth_token(auth: str = Header(...)) -> dict:
+CACHE_TTL = 300
+
+async def get_current_client(request: Request, db_session: AsyncSession = Depends(get_db_session)) -> ClientOut:
     """
-    FastAPI dependency to validate authentication token from header.
-
-    Args:
-        auth: JSON string containing client credentials
-
-    Returns:
-        dict: Parsed authentication data
-
-    Raises:
-        HTTPException: If authentication fails
+    FastAPI dependency to authenticate a client via API key.
+    Implements a sliding-window read-through caching strategy using Redis.
     """
-    valid_apps = ['ai-content-rag', 'ai-project-recommender']
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing Authorization header")
 
-    try:
-        auth = json.loads(auth)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail='Invalid header structure')
+    api_key = auth_header.split(" ")[1]
+    hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
 
-    if (not auth) or ('client-name' not in auth) or ('client-id' not in auth) or ('client-secret' not in auth):
-        raise HTTPException(status_code=400, detail='Mandatory header missing')
+    cache_key = f"client:{hashed_key}"
 
-    if auth['client-name'] not in valid_apps:
-        raise HTTPException(status_code=401, detail='Who are you?')
+    cached_client_json = await get_cache(cache_key)
+    if cached_client_json:
+        await touch_cache(cache_key, ttl=CACHE_TTL)
+        client_data = json.loads(cached_client_json)
+        return ClientOut(**client_data)
 
-    if (auth['client-id'] != constants.CLIENT_ID) or (auth['client-secret'] != constants.CLIENT_SECRET):
-        raise HTTPException(status_code=401, detail='Authentication failed')
+    results = await Client.fetch_records(db_session, filters={"hashed_api_key": hashed_key})
+    client_record = results[0] if results else None
 
-    return auth
+    if not client_record or not client_record.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or inactive API Key")
+
+    client_out = ClientOut.model_validate(client_record)
+    await set_cache(cache_key, client_out.model_dump_json(), ttl=CACHE_TTL)
+
+    return client_out

@@ -1,5 +1,5 @@
 import json
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 class BaseAdapter:
 
@@ -12,10 +12,10 @@ class BaseAdapter:
         end_marker = "```"
 
         if start_marker not in text:
-            raise HTTPException(status_code=500, detail="No JSON block found in response")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No JSON block found in response")
 
         if end_marker not in text:
-            raise HTTPException(status_code=500, detail="No JSON block found in response")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No JSON block found in response")
 
         start_idx = text.index(start_marker) + len(start_marker)
         end_idx = text.index(end_marker, start_idx)

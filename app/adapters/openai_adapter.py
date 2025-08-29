@@ -1,5 +1,5 @@
 import httpx
-import app.utils.constants as constants
+from app.utils import constants
 from .base_adapter import BaseAdapter
 
 class OpenAIAdapter(BaseAdapter):
@@ -33,7 +33,7 @@ class OpenAIAdapter(BaseAdapter):
         return self.response_parser(response) if params.structured_output else response
 
     async def generate_embeddings(self, texts):
-        """Generate embeddings using OpenAI's text-embedding-3-small model"""
+        """Generate embeddings using OpenAI's embedding model"""
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._api_key}"
@@ -44,11 +44,7 @@ class OpenAIAdapter(BaseAdapter):
             "encoding_format": "float"
         }
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.embedding_url,
-                headers=headers,
-                json=payload
-            )
+            response = await client.post(self.embedding_url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
 
