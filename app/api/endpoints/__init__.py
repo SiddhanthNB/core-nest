@@ -1,14 +1,13 @@
 from fastapi import APIRouter
-from .completion import router as completion_router
-from .embeddings import router as embeddings_router
-from .sentiment import router as sentiment_router
-from .summarize import router as summarization_router
 
-# Main router that combines all feature routers
+from . import completion, embeddings, sentiment, summarize
+
 router = APIRouter()
-router.include_router(completion_router)
-router.include_router(embeddings_router)
-router.include_router(sentiment_router)
-router.include_router(summarization_router)
+router.include_router(completion.router)
+router.include_router(embeddings.router)
+router.include_router(sentiment.router)
+router.include_router(summarize.router)
 
-__all__ = ['router']
+__all__ = [
+    "router"
+]

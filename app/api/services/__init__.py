@@ -4,8 +4,8 @@ from .sentiment_service import SentimentService
 from .summarization_service import SummarizationService
 
 __all__ = [
-    'CompletionService',
-    'EmbeddingsService',
-    'SentimentService',
-    'SummarizationService'
+    "CompletionService",
+    "EmbeddingsService",
+    "SentimentService",
+    "SummarizationService",
 ]

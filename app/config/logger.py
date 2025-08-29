@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime
-import app.utils.constants as constants
+from app.utils import constants
 from logging.handlers import TimedRotatingFileHandler
 
 def _get_file_path(timestamp: str) -> str:

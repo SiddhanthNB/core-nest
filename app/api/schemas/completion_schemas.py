@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
 class CompletionSchema(BaseModel):
@@ -11,5 +11,5 @@ class CompletionSchema(BaseModel):
     @classmethod
     def validate_user_prompt(cls, v):
         if not v or not v.strip():
-            raise HTTPException(status_code=400, detail="'user_prompt' cannot be empty")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'user_prompt' cannot be empty")
         return v

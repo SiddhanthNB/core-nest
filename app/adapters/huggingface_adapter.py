@@ -1,5 +1,5 @@
 import httpx
-import app.utils.constants as constants
+from app.utils import constants
 from .base_adapter import BaseAdapter
 
 class HuggingfaceAdapter(BaseAdapter):

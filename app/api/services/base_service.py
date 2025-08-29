@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from types import SimpleNamespace
 from app.config.logger import logger
 from app.adapters import GoogleAdapter
@@ -30,7 +30,7 @@ class BaseApiService:
                 logger.warning(f"Response generation failed for {provider_name} with ERROR: {e}")
                 continue
 
-        raise HTTPException(status_code=503, detail="Failed to generate response: No response from any provider")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to generate response: No response from any provider")
 
     async def _generate_embeddings_with_fallback(self, params):
         _providers_hash = {
@@ -48,7 +48,7 @@ class BaseApiService:
                 logger.warning(f"Embedding generation failed for {provider_name}: {str(e)}")
                 continue
 
-        raise HTTPException(status_code=503, detail="Failed to generate embeddings: No response from any provider")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to generate embeddings: No response from any provider")
 
     def _get_prompts(self, prompt_type: str, **kwargs):
         base_path = Path(__file__).parent.parent.parent / "utils" / "prompts"

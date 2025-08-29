@@ -1,7 +1,5 @@
-import json
 import httpx
-from fastapi import HTTPException
-import app.utils.constants as constants
+from app.utils import constants
 from .base_adapter import BaseAdapter
 
 class GoogleAdapter(BaseAdapter):
@@ -34,12 +32,7 @@ class GoogleAdapter(BaseAdapter):
                 ]
             }
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                url,
-                headers=headers,
-                json=payload,
-                params={"key": self.api_key}
-            )
+            response = await client.post(url, headers=headers, json=payload, params={"key": self.api_key})
             response.raise_for_status()
             data = response.json()
             response_text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -73,11 +66,3 @@ class GoogleAdapter(BaseAdapter):
             data = response.json()
 
         return [ result["values"] for result in data["embeddings"] ]
-
-    # def _response_parser(self, response):
-    #     text = response.strip()
-    #     if text.startswith("```json") and text.endswith("```"):
-    #         json_str = text[len("```json"): -len("```")].strip()
-    #         return json.loads(json_str)
-    #     else:
-    #         raise HTTPException(status_code=500, detail="Response is not in expected JSON format")
