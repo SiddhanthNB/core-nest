@@ -2,16 +2,16 @@ from app.api.dependencies.auth import get_current_client
 from app.config.logger import logger
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Depends, status
-from app.api.services import SentimentService
-from app.api.schemas import SentimentSchema
+from app.api.services import CompletionService
+from app.api.schemas import CompletionSchema
 from app.api.dependencies import apply_rate_limiting
 
-router = APIRouter(tags=["sentiment"], dependencies=[Depends(apply_rate_limiting)])
+router = APIRouter(tags=["completions"], dependencies=[Depends(apply_rate_limiting)])
 
-@router.post('/sentiment')
-async def get_sentiment_analysis(params: SentimentSchema):
+@router.post('/completions')
+async def create_completions(params: CompletionSchema):
     try:
-        service = SentimentService()
+        service = CompletionService()
         response = await service.dispatch(params)
         return JSONResponse(content=response, status_code=status.HTTP_200_OK)
     except Exception as e:

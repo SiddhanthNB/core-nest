@@ -5,10 +5,10 @@ from app.api.services import SummarizationService
 from app.api.schemas import SummarizationSchema
 from app.api.dependencies import apply_rate_limiting
 
-router = APIRouter(tags=["summarize"], dependencies=[Depends(apply_rate_limiting)])
+router = APIRouter(tags=["summaries"], dependencies=[Depends(apply_rate_limiting)])
 
-@router.post('/summarize')
-async def get_summarization(params: SummarizationSchema):
+@router.post('/summaries')
+async def create_summaries(params: SummarizationSchema):
     try:
         service = SummarizationService()
         response = await service.dispatch(params)

@@ -7,8 +7,8 @@ from app.api.dependencies import apply_rate_limiting
 
 router = APIRouter(tags=["embeddings"], dependencies=[Depends(apply_rate_limiting)])
 
-@router.post('/embed')
-async def get_vector_embeddings(params: EmbeddingSchema):
+@router.post('/embeddings')
+async def create_embeddings(params: EmbeddingSchema):
     try:
         service = EmbeddingsService()
         response = await service.dispatch(params)
