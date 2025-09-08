@@ -3,13 +3,13 @@ from sqlalchemy import Column, String, Boolean, DateTime, func, event
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.models import BaseModel
-from app.utils.helpers import flush_client_cache
+from app.utils.helpers.orm_event_handlers import flush_client_cache
 
 class Client(BaseModel):
     __tablename__ = "corenest__clients"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
+    name = Column(String, nullable=False, unique=True)
     hashed_api_key = Column(String, nullable=False, unique=True)
     is_active = Column(Boolean, nullable=False, default=True)
 

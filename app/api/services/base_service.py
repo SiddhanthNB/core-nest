@@ -1,4 +1,5 @@
 from pathlib import Path
+from httpx import HTTPStatusError
 from fastapi import HTTPException, status
 from types import SimpleNamespace
 from app.config.logger import logger
@@ -12,7 +13,7 @@ class BaseApiService:
     def __init__(self):
         pass
 
-    async def _generate_response_with_fallback(self, params):
+    async def _generate_response(self, params):
         _providers_hash = {
             'grok': GroqAdapter,
             'google': GoogleAdapter,
@@ -20,35 +21,66 @@ class BaseApiService:
             'openai': OpenAIAdapter
         }
 
-        for provider_name, adapter_class in _providers_hash.items():
-            try:
-                adapter = adapter_class()
-                response = await adapter.generate_response(params)
-                logger.info(f'Response generation successful with provider: {provider_name}')
-                return { 'content': response, 'provider': provider_name, 'model': adapter.generation_model }
-            except Exception as e:
-                logger.warning(f"Response generation failed for {provider_name} with ERROR: {e}")
-                continue
+        if not params.provider:
+            return await self._apply_fallback_mechanism('generate_response', params, _providers_hash)
 
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to generate response: No response from any provider")
+        adapter_class = _providers_hash.get(params.provider)
+        try:
+            adapter = adapter_class()
+            response = await adapter.generate_response(params)
+            logger.info(f'Response generation successful with provider: {params.provider}')
+            return { 'content': response, 'provider': params.provider, 'model': adapter.generation_model }
+        except HTTPStatusError as e:
+            logger.error(f"HTTP error during response generation for {params.provider}: {str(e)}")
+            raise HTTPException(status_code=e.response.status_code, detail=f"HTTP error from {params.provider}: {e.response.text}")
+        except Exception as e:
+            logger.error(f"Response generation failed for {params.provider}: {str(e)}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Response generation failed for {params.provider}")
 
-    async def _generate_embeddings_with_fallback(self, params):
+    async def _generate_embeddings(self, params):
         _providers_hash = {
             'google': GoogleAdapter,
             'openai': OpenAIAdapter
         }
 
+        if not params.provider:
+            return await self._apply_fallback_mechanism('generate_embeddings', params, _providers_hash)
+
+        adapter_class = _providers_hash.get(params.provider)
+        try:
+            adapter = adapter_class()
+            embeddings = await adapter.generate_embeddings(params.texts)
+            logger.info(f'Embeddings generated successfully with provider: {params.provider}')
+            return { 'content': embeddings, 'provider': params.provider, 'model': adapter.embedding_model }
+        except HTTPStatusError as e:
+            logger.error(f"HTTP error during embedding generation for {params.provider}: {str(e)}")
+            raise HTTPException(status_code=e.response.status_code, detail=f"HTTP error from {params.provider}: {e.response.text}")
+        except Exception as e:
+            logger.error(f"Embedding generation failed for {params.provider}: {str(e)}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Embedding generation failed for {params.provider}")
+
+    async def _apply_fallback_mechanism(self, operation, params, _providers_hash):
+        if operation not in ['generate_response', 'generate_embeddings']:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported operation: {operation}")
+
         for provider_name, adapter_class in _providers_hash.items():
             try:
                 adapter = adapter_class()
-                embeddings = await adapter.generate_embeddings(params.texts)
-                logger.info(f'Embeddings generated successfully with provider: {provider_name}')
-                return { 'content': embeddings, 'provider': provider_name, 'model': adapter.embedding_model }
+
+                if operation == 'generate_response':
+                    result = await adapter.generate_response(params)
+                    model_used = adapter.generation_model
+                elif operation == 'generate_embeddings':
+                    result = await adapter.generate_embeddings(params)
+                    model_used = adapter.embedding_model
+
+                logger.info(f'Operation successful with provider: {provider_name}')
+                return { 'content': result, 'provider': provider_name, 'model': model_used }
             except Exception as e:
-                logger.warning(f"Embedding generation failed for {provider_name}: {str(e)}")
+                logger.warning(f"Operation failed for {provider_name} with ERROR: {e}")
                 continue
 
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to generate embeddings: No response from any provider")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Operation failed: No response from any provider")
 
     def _get_prompts(self, prompt_type: str, **kwargs):
         base_path = Path(__file__).parent.parent.parent / "utils" / "prompts"

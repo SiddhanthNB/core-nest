@@ -8,5 +8,5 @@ class SummarizationService(BaseApiService):
     async def dispatch(self, params):
         prompts = self._get_prompts('summarization', text=params.text)
         all_params = self._get_all_params(params=params, prompts=prompts)
-        payload = await self._generate_response_with_fallback(all_params)
+        payload = await self._generate_response(all_params)
         return { 'success': True, 'result': payload }

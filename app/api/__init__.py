@@ -4,9 +4,9 @@ CoreNest FastAPI Application Package
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
-
 from app.api.endpoints import router
-from app.utils.helpers import lifespan, api_logger_middleware
+from app.utils.helpers.fastapi_lifespan import lifespan
+from app.utils.helpers.api_logger import api_logger_middleware
 
 def create_app():
     """Create and configure FastAPI application"""

@@ -6,5 +6,5 @@ class CompletionService(BaseApiService):
         super().__init__()
 
     async def dispatch(self, params):
-        payload = await self._generate_response_with_fallback(params)
+        payload = await self._generate_response(params)
         return { 'success': True, 'result': payload }

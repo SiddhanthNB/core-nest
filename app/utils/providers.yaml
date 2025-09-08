@@ -6,7 +6,7 @@ services:
       model: "gemini-2.0-flash-lite"
       verb: ":generateContent"
     embedding:
-      model: "text-embedding-004"
+      model: "gemini-embedding-001"
       verb: ":batchEmbedContents"
   openai:
     key: "{OPENAI_API_KEY}"
@@ -19,7 +19,7 @@ services:
   huggingface:
     key: "{HUGGINGFACE_API_KEY}"
     url: "https://router.huggingface.co/together/v1/chat/completions"
-    model: "deepseek-ai/DeepSeek-V3"
+    model: "mistralai/Mistral-7B-Instruct-v0.3"
   groq:
     key: "{GROQ_API_KEY}"
     url: "https://api.groq.com/openai/v1/chat/completions"

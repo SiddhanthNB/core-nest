@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, ForeignKey, DateTime, func, event
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.models import BaseModel
-from app.utils.helpers import flush_client_cache
+from app.utils.helpers.orm_event_handlers import flush_client_cache
 
 class RateLimitConfig(BaseModel):
     __tablename__ = "corenest__rate_limit_configs"

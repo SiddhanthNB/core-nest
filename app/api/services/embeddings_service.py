@@ -9,5 +9,5 @@ class EmbeddingsService(BaseApiService):
         super().__init__()
 
     async def dispatch(self, params):
-        payload = await self._generate_embeddings_with_fallback(params)
+        payload = await self._generate_embeddings(params)
         return { 'success': True, 'result': payload }

@@ -1,6 +1,7 @@
 alembic==1.16.2
 fastapi==0.115.12
 httpx==0.28.1
+invoke==2.2.0
 psycopg[binary,pool]==3.1.18
 python-dotenv==1.1.0
 PyYAML==6.0.2
