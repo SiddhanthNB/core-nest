@@ -7,6 +7,7 @@ from app.adapters import GoogleAdapter
 from app.adapters import GroqAdapter
 from app.adapters import OpenAIAdapter
 from app.adapters import OpenRouterAdapter
+from app.adapters import MinstralAdapter
 
 class BaseApiService:
 
@@ -15,10 +16,11 @@ class BaseApiService:
 
     async def _generate_response(self, params):
         _providers_hash = {
-            'grok': GroqAdapter,
+            'groq': GroqAdapter,
             'google': GoogleAdapter,
             'openrouter': OpenRouterAdapter,
-            'openai': OpenAIAdapter
+            'openai': OpenAIAdapter,
+            'minstral': MinstralAdapter,
         }
 
         if not params.provider:
@@ -40,7 +42,8 @@ class BaseApiService:
     async def _generate_embeddings(self, params):
         _providers_hash = {
             'google': GoogleAdapter,
-            'openai': OpenAIAdapter
+            'openai': OpenAIAdapter,
+            'minstral': MinstralAdapter,
         }
 
         if not params.provider:

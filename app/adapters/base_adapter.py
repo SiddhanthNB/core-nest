@@ -7,15 +7,17 @@ class BaseAdapter:
         pass
 
     def response_parser(self, response):
-        text = response.strip()
+        if response.startswith('{') and response.endswith('}'):
+            return json.loads(response)
+        elif response.contains('```json') and response.contains('```'):
+            return self._extract_json_block(response)
+        else:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No JSON block found in response")
+
+    def _extract_json_block(self, text):
+        text = text.strip()
         start_marker = "```json"
         end_marker = "```"
-
-        if start_marker not in text:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No JSON block found in response")
-
-        if end_marker not in text:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No JSON block found in response")
 
         start_idx = text.index(start_marker) + len(start_marker)
         end_idx = text.index(end_marker, start_idx)

@@ -27,4 +27,12 @@ services:
   openrouter:
     key: "{OPENROUTER_API_KEY}"
     url: "https://openrouter.ai/api/v1/chat/completions"
-    model: "deepseek/deepseek-chat:free"
+    model: "deepseek/deepseek-chat-v3.1:free"
+  minstral:
+    key: "{MINSTRAL_API_KEY}"
+    embedding:
+      model: "mistral-embed"
+      url: "https://api.mistral.ai/v1/embeddings"
+    generation:
+      model: "ministral-8b-2410"
+      url: "https://api.mistral.ai/v1/chat/completions"

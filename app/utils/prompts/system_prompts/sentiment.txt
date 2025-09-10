@@ -10,7 +10,7 @@ You must strictly respond ONLY with valid JSON in the following format:
 
 Sentiment Classification Rules:
 - "positive": compound score >= 0.05
-- "neutral": compound score > -0.05 and < 0.05  
+- "neutral": compound score > -0.05 and < 0.05
 - "negative": compound score <= -0.05
 
 Compound Score Guidelines:
