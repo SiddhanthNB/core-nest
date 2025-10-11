@@ -8,6 +8,7 @@ from app.adapters import GroqAdapter
 from app.adapters import OpenAIAdapter
 from app.adapters import OpenRouterAdapter
 from app.adapters import MinstralAdapter
+from app.adapters import CerebrasAdapter
 
 class BaseApiService:
 
@@ -21,6 +22,7 @@ class BaseApiService:
             'openrouter': OpenRouterAdapter,
             'openai': OpenAIAdapter,
             'minstral': MinstralAdapter,
+            'cerebras': CerebrasAdapter,
         }
 
         if not params.provider:

@@ -36,3 +36,7 @@ services:
     generation:
       model: "ministral-8b-2410"
       url: "https://api.mistral.ai/v1/chat/completions"
+  cerebras:
+    key: "{CEREBRAS_API_KEY}"
+    url: "https://api.cerebras.ai/v1/chat/completions"
+    model: "qwen-3-235b-a22b-instruct-2507"
