@@ -1,10 +1,10 @@
-from typing import List, Optional
+from typing import List
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
 class EmbeddingSchema(BaseModel):
     texts: List[str] = Field(..., description="List of input texts")
-    provider: Optional[str] = Field(None, description="The provider to use for generating embeddings")
+    provider: str = Field(..., description="The provider to use for generating embeddings")
 
     @field_validator('texts')
     @classmethod
@@ -17,6 +17,6 @@ class EmbeddingSchema(BaseModel):
     @classmethod
     def validate_provider(cls, v):
         valid_providers = ['google', 'openai', 'minstral']
-        if v and v not in valid_providers:
+        if v not in valid_providers:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Provider '{v}' is not supported. Supported providers are: {valid_providers}")
         return v

@@ -48,9 +48,6 @@ class BaseApiService:
             'minstral': MinstralAdapter,
         }
 
-        if not params.provider:
-            return await self._apply_fallback_mechanism('generate_embeddings', params, _providers_hash)
-
         adapter_class = _providers_hash.get(params.provider)
         try:
             adapter = adapter_class()

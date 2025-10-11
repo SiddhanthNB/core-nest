@@ -9,7 +9,7 @@ load_dotenv()
 APP_ENV = os.getenv('APP_ENV', 'production')
 APP_PORT = int(os.getenv('APP_PORT', 3000))
 PROJECT_NAME = 'corenest'
-WEB_CONCURRENCY = int(os.getenv('WEB_CONCURRENCY', 2))
+WEB_CONCURRENCY = int(os.getenv('WEB_CONCURRENCY', 1))
 
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
