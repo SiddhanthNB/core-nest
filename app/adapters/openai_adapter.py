@@ -7,10 +7,10 @@ class OpenAIAdapter(BaseAdapter):
     def __init__(self):
         super().__init__()
         self._api_key = constants.SERVICES["openai"]["key"]
+        self._generation_url = constants.SERVICES["openai"]["generation"]["url"]
+        self._embedding_url = constants.SERVICES["openai"]["embedding"]["url"]
         self.generation_model = constants.SERVICES["openai"]["generation"]["model"]
-        self.generation_url = constants.SERVICES["openai"]["generation"]["url"]
         self.embedding_model = constants.SERVICES["openai"]["embedding"]["model"]
-        self.embedding_url = constants.SERVICES["openai"]["embedding"]["url"]
 
     async def generate_response(self, params):
         headers = {
@@ -25,7 +25,7 @@ class OpenAIAdapter(BaseAdapter):
             ]
         }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self.generation_url, headers=headers, json=payload)
+            response = await client.post(self._generation_url, headers=headers, json=payload)
             response.raise_for_status()
             response = response.json()
             response = response["choices"][0]["message"]["content"]
@@ -43,7 +43,7 @@ class OpenAIAdapter(BaseAdapter):
             "encoding_format": "float"
         }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self.embedding_url, headers=headers, json=payload)
+            response = await client.post(self._embedding_url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
 

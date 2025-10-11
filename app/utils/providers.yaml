@@ -18,16 +18,19 @@ services:
       url: "https://api.openai.com/v1/embeddings"
   huggingface:
     key: "{HUGGINGFACE_API_KEY}"
-    url: "https://router.huggingface.co/together/v1/chat/completions"
-    model: "mistralai/Mistral-7B-Instruct-v0.3"
+    generation:
+      model: "mistralai/Mistral-7B-Instruct-v0.3"
+      url: "https://router.huggingface.co/together/v1/chat/completions"
   groq:
     key: "{GROQ_API_KEY}"
-    url: "https://api.groq.com/openai/v1/chat/completions"
-    model: "llama-3.1-8b-instant"
+    generation:
+      model: "llama-3.1-8b-instant"
+      url: "https://api.groq.com/openai/v1/chat/completions"
   openrouter:
     key: "{OPENROUTER_API_KEY}"
-    url: "https://openrouter.ai/api/v1/chat/completions"
-    model: "deepseek/deepseek-chat-v3.1:free"
+    generation:
+      model: "deepseek/deepseek-chat-v3.1:free"
+      url: "https://openrouter.ai/api/v1/chat/completions"
   minstral:
     key: "{MINSTRAL_API_KEY}"
     embedding:
@@ -38,5 +41,6 @@ services:
       url: "https://api.mistral.ai/v1/chat/completions"
   cerebras:
     key: "{CEREBRAS_API_KEY}"
-    url: "https://api.cerebras.ai/v1/chat/completions"
-    model: "qwen-3-235b-a22b-instruct-2507"
+    generation:
+      model: "qwen-3-235b-a22b-instruct-2507"
+      url: "https://api.cerebras.ai/v1/chat/completions"
