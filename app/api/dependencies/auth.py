@@ -2,7 +2,6 @@ import json
 import hashlib
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.dependencies.db_session import get_db_session
 from app.config.redis import get_cache, set_cache, touch_cache
 from app.db.models import Client

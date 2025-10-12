@@ -16,7 +16,6 @@ class Client(BaseModel):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationship to RateLimitConfig (one-to-one), eagerly loaded for performance.
     rate_limit_config = relationship("RateLimitConfig", back_populates="client", uselist=False, cascade="all, delete-orphan", lazy="joined")
 
     def __repr__(self):

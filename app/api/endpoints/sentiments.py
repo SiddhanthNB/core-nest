@@ -1,4 +1,3 @@
-from app.api.dependencies.auth import get_current_client
 from app.config.logger import logger
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Depends, status
