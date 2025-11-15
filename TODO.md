@@ -1,43 +1,92 @@
-# Project TODO List
+# BYOT (Bring Your Own Token) Integration Plan
 
-This list outlines the key architectural and development tasks for the core-nest API.
+This document outlines the steps to implement a "Bring Your Own Token" (BYOT) feature, allowing users to leverage their own provider credentials while still benefiting from the CoreNest unified API.
 
-## 1. Authentication & Authorization
+## Phase 1: MVP Implementation
 
-- [ ] **Implement Dual Authentication Dependency:**
-  - Create a single FastAPI dependency (`get_current_auth`) to handle authentication.
-  - The dependency should support two methods:
-    1.  **Our API Keys:** Based on a `client_id` provided by our service (e.g., in `Authorization` header).
-    2.  **Bring Your Own Token (BYOT):** For users providing their own keys for providers like OpenAI, Gemini, etc. (e.g., in `X-Provider-Token` headers).
-  - The dependency should return a structured object (e.g., an `AuthState` Pydantic model) indicating the auth method and relevant identifiers (`client_id`).
+**Scope:**
+- **Endpoints:** `/completions` and `/embeddings`
+- **Providers:** `openai` and `google`
 
-- [ ] **Secure Client Credential Storage:**
-  - Each client using our API keys must have a unique `client_id` and `client_secret`.
-  - In the database, `client_secret`s must be stored as a **hash** using a strong algorithm (e.g., Bcrypt), never in plaintext.
+---
 
-- [ ] **Implement Authentication Caching with Redis:**
-  - To improve performance and reduce database load, add a caching layer to the authentication dependency.
-  - On an authentication attempt, first query Redis for the client's cached `hashed_secret`.
-  - **On Cache Miss:** Query the primary PostgreSQL database, and upon successful validation, store the `hashed_secret` in the Redis cache.
-  - **On Cache Hit:** Use the `hashed_secret` from Redis for verification.
-  - **Expiration Policy:** Use a **sliding window** expiration. On each successful cache hit, reset the TTL of the key (e.g., to 5 minutes).
-  - **Revocation:** The process for revoking a client's access must include deleting their entry from both the PostgreSQL database and the Redis cache.
+### Task 1: API Design and Schema Definition
 
-## 2. Rate Limiting
+The BYOT feature will be triggered by the presence of specific HTTP headers. CoreNest authentication is still required for all requests to track usage and prevent abuse.
 
-- [ ] **Implement Redis-based Rate Limiter:**
-  - Create a FastAPI dependency (`apply_rate_limiting`) that uses Redis to perform rate limiting.
-  - This dependency must chain from the authentication dependency, using the `client_id` from the `AuthState` object.
-  - Rate limiting should only be applied to requests using our API keys, not to BYOT requests.
-  - Use an `asyncio`-compatible Redis client (`redis.asyncio`) to avoid blocking the server.
-  - Connect to the Redis instance using an environment variable (`REDIS_URL`).
+- **Headers for BYOT trigger:**
+    - `X-Provider`: The name of the provider (e.g., `"openai"`, `"google"`).
+    - `X-Token`: The user's personal API key for the specified provider.
 
-## 3. Security Hardening
+- **JSON Body Modifications:**
+    - The schemas for `CompletionSchema` and `EmbeddingSchema` will be updated to include an optional `model` field.
+    - If `model` is provided in a BYOT request, it will override the default model configured for that provider.
+    - If `model` is not provided, the adapter's default model will be used.
 
-- [ ] **Remove `auth_headers` from API Logs:**
-  - This is a **critical security vulnerability**.
-  - Modify the `_APILoggerMiddleware` to stop logging the `auth_headers` field.
-  - Remove the `auth_headers` column from the `APILog` model and create a database migration to drop it from the table.
+### Task 2: Security - Prevent Token Logging
 
-## 4. General
-- [ ] Review and refactor existing code to incorporate the new dependency structure for auth and rate limiting.
+It is critical that user-provided tokens are never logged.
+
+- **File to Modify:** `app/utils/helpers/api_logger.py`
+- **Action:**
+    - Update the logging middleware/utility to inspect incoming request headers.
+    - Before logging the request details, check for the `X-Token` header.
+    - If it exists, replace its value with a redacted placeholder (e.g., `"[REDACTED]"`).
+
+### Task 3: Update Service Layer Logic
+
+The service layer will be adapted to handle the new BYOT request flow.
+
+- **Files to Modify:** `app/api/services/completion_service.py`, `app/api/services/embeddings_service.py`, and potentially `app/api/services/base_service.py`.
+- **Action:**
+    - In the `dispatch` method of each service, check for the presence of `X-Provider` and `X-Token` headers.
+    - **If headers are present (BYOT Flow):**
+        1.  Bypass the standard provider selection and fallback logic (`_generate_response_with_fallback`).
+        2.  Instantiate the correct adapter (e.g., `OpenAIAdapter`) based on the `X-Provider` header value.
+        3.  Call the adapter's method, passing the user's `X-Token` and the optional `model` from the request body as new arguments.
+    - **If headers are absent (Managed Flow):**
+        1.  The logic proceeds as it currently does.
+
+### Task 4: Update Adapters for Credential Overriding
+
+The adapters must be updated to accept and use the user-provided credentials.
+
+- **Files to Modify:** `app/adapters/openai_adapter.py`, `app/adapters/google_adapter.py`.
+- **Action:**
+    - Modify the relevant methods (e.g., `generate_response`, `generate_embeddings`) to accept optional `api_key` and `model` arguments.
+    - Inside the method, if an `api_key` is provided, use it to set the `Authorization` header for the `httpx` request, overriding the instance's default key.
+    - If a `model` is provided, use it in the request payload instead of the default model.
+
+### Task 5: Implement Specific Error Handling
+
+Clear error messages for BYOT users are essential for a good user experience.
+
+- **Files to Modify:** Service layer files (`completion_service.py`, etc.).
+- **Action:**
+    - Wrap the adapter calls in a `try...except` block that specifically catches `httpx.HTTPStatusError`.
+    - Inspect the error response from the provider.
+    - If the status code is `401` (Unauthorized) or `403` (Forbidden), return an `HTTP 400 Bad Request` to the end-user with a clear message like: `{"detail": "The provided token for 'openai' is invalid, expired, or has insufficient permissions."}`.
+    - If the status code is `429` (Too Many Requests), return an `HTTP 429` with a message like: `{"detail": "The provided token for 'openai' has exceeded its quota. Please check your provider account."}`.
+
+### Task 6: Create a Client Management Script
+
+To address the inconvenience of manual database entries for new CoreNest clients.
+
+- **New File:** `scripts/create_client.py`
+- **Action:**
+    - Create a standalone Python script that connects to the database.
+    - The script should accept a client `name` as a command-line argument.
+    - It will then:
+        1.  Generate a new secure API key.
+        2.  Hash the key.
+        3.  Create a new `Client` record in the database with the provided name and hashed key.
+        4.  Print the new, un-hashed API key to the console for the admin to share with the user.
+
+---
+
+## Phase 2: Future Enhancements (Post-MVP)
+
+- [ ] Extend BYOT support to `/summaries` and `/sentiments` endpoints.
+- [ ] Add BYOT support for the remaining providers: `groq`, `huggingface`, `openrouter`.
+- [ ] Develop an internal-only admin API endpoint (e.g., `/admin/clients`) as a more robust alternative to the script for client management.
+- [ ] Consider implementing a caching layer for BYOT requests to reduce redundant calls for identical prompts.
