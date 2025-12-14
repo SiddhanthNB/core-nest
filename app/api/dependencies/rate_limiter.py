@@ -25,6 +25,8 @@ async def apply_rate_limiting(request: Request, background_tasks: BackgroundTask
 
             if count > current_client.rate_limit_config.requests_per_minute:
                 raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Too many requests per minute - Try Again after {60 - now.second} seconds", headers={"Retry-After": f"{60 - now.second}"})
+    except HTTPStatusError as e:
+        raise
     except Exception as e:
         logger.error(f"Error occurred while applying rate limiting in minute: {e}")
 
@@ -38,6 +40,8 @@ async def apply_rate_limiting(request: Request, background_tasks: BackgroundTask
 
             if count > current_client.rate_limit_config.requests_per_hour:
                 raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Too many requests per hour - Try Again after {3600 - now.second} seconds", headers={"Retry-After": f"{3600 - now.second}"})
+    except HTTPStatusError as e:
+        raise
     except Exception as e:
         logger.error(f"Error occurred while applying rate limiting in hour: {e}")
 
@@ -51,6 +55,8 @@ async def apply_rate_limiting(request: Request, background_tasks: BackgroundTask
 
             if count > current_client.rate_limit_config.requests_per_day:
                 raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Too many requests per day - Try Again after {86400 - now.second} seconds", headers={"Retry-After": f"{86400 - now.second}"})
+    except HTTPStatusError as e:
+        raise
     except Exception as e:
         logger.error(f"Error occurred while applying rate limiting in day: {e}")
 
@@ -68,5 +74,7 @@ async def apply_rate_limiting(request: Request, background_tasks: BackgroundTask
                 await redis_client.decr(concurrent_key)
 
             background_tasks.add_task(decrement_concurrent_counter)
+    except HTTPStatusError as e:
+        raise
     except Exception as e:
         logger.error(f"Error occurred while applying rate limiting in concurrent requests: {e}")
