@@ -11,5 +11,5 @@ def create_client(ctx, name: str):
     """
     asyncio.run(_create_client_helper(name))
 
-one_time_collection = Collection('one-time-tasks')
-one_time_collection.add_task(create_client, 'create-client')
+one_time_tasks_ns = Collection('one-time-tasks')
+one_time_tasks_ns.add_task(create_client, 'create-client')

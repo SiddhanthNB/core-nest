@@ -19,6 +19,13 @@ async def create_client(name: str):
                 "hashed_api_key": hashed_key
             }
 
+            # check if client with the same name already exists which has is_active = True
+            existing_client = await Client.fetch_records(session, {"name": name, "is_active": True})
+            if existing_client:
+                print(f"A client with the name '{name}' already exists and is active.")
+                print("Please choose a different name OR deactivate the existing client before creating a new one.")
+                return
+
             new_client = await Client.create_record(session, payload)
 
             if new_client:

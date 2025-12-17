@@ -6,13 +6,12 @@ from urllib.parse import quote_plus
 
 load_dotenv()
 
+PROJECT_NAME = 'corenest'
+
 APP_ENV = os.getenv('APP_ENV', 'production')
 APP_PORT = int(os.getenv('PORT', 3000))
-PROJECT_NAME = 'corenest'
-WEB_CONCURRENCY = int(os.getenv('WEB_CONCURRENCY', 1))
 
-CLIENT_ID = os.getenv('CLIENT_ID')
-CLIENT_SECRET = os.getenv('CLIENT_SECRET')
+WEB_CONCURRENCY = int(os.getenv('WEB_CONCURRENCY', 1))
 
 SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
 SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL').replace('[YOUR-PASSWORD]', quote_plus(SUPABASE_DB_PASSWORD))

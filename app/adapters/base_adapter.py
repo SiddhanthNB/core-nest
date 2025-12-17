@@ -9,7 +9,7 @@ class BaseAdapter:
     def response_parser(self, response):
         if response.startswith('{') and response.endswith('}'):
             return json.loads(response)
-        elif response.contains('```json') and response.contains('```'):
+        elif '```json' in response and '```' in response:
             return self._extract_json_block(response)
         else:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No JSON block found in response")

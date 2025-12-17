@@ -17,7 +17,7 @@ def create_app():
     app.add_middleware(api_logger_middleware)
 
     # Root routes
-    app.add_api_route('/', lambda: RedirectResponse(url='/redoc'), methods=['GET'], name='Root')
+    app.add_api_route('/', lambda: RedirectResponse(url='/docs'), methods=['GET'], name='Root')
     app.add_api_route('/ping', lambda: JSONResponse(content='pong', status_code=status.HTTP_200_OK), methods=['GET'], name='Ping')
 
     # Include API routes
