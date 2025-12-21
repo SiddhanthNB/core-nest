@@ -23,11 +23,11 @@ class BaseAdapter:
         def _log_before_sleep(retry_state):
             exc = retry_state.outcome.exception()
             sleep = retry_state.next_action.sleep if retry_state.next_action else 0
-            logger.warning(f"Request to {url} with HTTP method {method} failed (attempt {retry_state.attempt_number}); retrying in {sleep:.1f}s due to: {exc}")
+            logger.warning(f"[retry attempt {retry_state.attempt_number}] Request to {url} with HTTP method {method} failed; retrying in {sleep:.1f}s due to: {exc}")
 
         async for attempt in AsyncRetrying(
             wait=wait_exponential(multiplier=1, min=1, max=8),
-            stop=stop_after_attempt(3),
+            stop=stop_after_attempt(4),
             retry=retry_if_exception(_is_retryable_exception),
             before_sleep=_log_before_sleep,
             reraise=True,

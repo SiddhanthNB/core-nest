@@ -85,11 +85,10 @@ def _format_section(title: str, results: List[Dict]) -> List[str]:
         return []
 
     lines = [f"### {title}", ""]
-    lines.append("| Provider | Status | Latency (ms) | Details |")
-    lines.append("| --- | --- | --- | --- |")
+    lines.append("| Provider | Status | Details |")
+    lines.append("| --- | --- | --- |")
     for item in results:
-        status_icon = "✅ Success" if item["status"] == "success" else "❌ Failure"
-        latency = item.get("latency_ms", "-")
+        status_icon = "Success" if item["status"] == "success" else "Failure"
         if item["status"] == "success":
             details = "ok"
         else:
@@ -97,7 +96,7 @@ def _format_section(title: str, results: List[Dict]) -> List[str]:
             details = raw.replace("\n", " ").replace("\r", " ")
             if len(details) > 200:
                 details = details[:200] + "...(truncated)"
-        lines.append(f"| {item['provider']} | {status_icon} | {latency} | {details} |")
+        lines.append(f"| {item['provider']} | {status_icon} | {details} |")
     lines.append("")
     return lines
 
