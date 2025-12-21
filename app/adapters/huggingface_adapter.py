@@ -6,9 +6,9 @@ class HuggingfaceAdapter(BaseAdapter):
 
     def __init__(self):
         super().__init__()
-        self._api_key = constants.SERVICES["openai"]["key"]
-        self._generation_url = constants.SERVICES["openai"]["generation"]["url"]
-        self.generation_model = constants.SERVICES["openai"]["generation"]["model"]
+        self._api_key = constants.SERVICES["huggingface"]["key"]
+        self._generation_url = constants.SERVICES["huggingface"]["generation"]["url"]
+        self.generation_model = constants.SERVICES["huggingface"]["generation"]["model"]
 
     async def generate_response(self, params):
         headers = {
@@ -23,9 +23,14 @@ class HuggingfaceAdapter(BaseAdapter):
             ]
         }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self._generation_url, headers=headers, json=payload)
-            response.raise_for_status()
+            response = await self._request_with_retries(
+                client,
+                "POST",
+                self._generation_url,
+                headers=headers,
+                json=payload,
+            )
             response = response.json()
-            response = response["choices"][0]["message"]
+            response = response["choices"][0]["message"]["content"]
 
-        return response
+        return self.response_parser(response) if params.structured_output else response

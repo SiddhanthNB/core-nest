@@ -3,7 +3,7 @@ services:
     key: "{GOOGLE_API_KEY}"
     base_url: "https://generativelanguage.googleapis.com/v1beta/models/"
     generation:
-      model: "gemini-2.0-flash-lite"
+      model: "gemini-2.5-flash-lite"
       verb: ":generateContent"
     embedding:
       model: "gemini-embedding-001"
@@ -29,7 +29,7 @@ services:
   openrouter:
     key: "{OPENROUTER_API_KEY}"
     generation:
-      model: "deepseek/deepseek-chat-v3.1:free"
+      model: "google/gemma-3-27b-it:free"
       url: "https://openrouter.ai/api/v1/chat/completions"
   minstral:
     key: "{MINSTRAL_API_KEY}"
@@ -42,5 +42,5 @@ services:
   cerebras:
     key: "{CEREBRAS_API_KEY}"
     generation:
-      model: "qwen-3-235b-a22b-instruct-2507"
+      model: "gpt-oss-120b"
       url: "https://api.cerebras.ai/v1/chat/completions"

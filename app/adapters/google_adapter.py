@@ -13,8 +13,10 @@ class GoogleAdapter(BaseAdapter):
         self._generation_url = f"{base_url}{self.generation_model}{constants.SERVICES['google']['generation']['verb']}"
         self._embedding_url = f"{base_url}{self.embedding_model}{constants.SERVICES['google']['embedding']['verb']}"
 
+    def _build_headers(self):
+        return {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
+
     async def generate_response(self, params):
-        headers = { "Content-Type": "application/json" }
         payload = {
             "contents": [
                 {
@@ -31,15 +33,19 @@ class GoogleAdapter(BaseAdapter):
                 ]
             }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self._generation_url, headers=headers, json=payload, params={"key": self.api_key})
-            response.raise_for_status()
+            response = await self._request_with_retries(
+                client,
+                "POST",
+                self._generation_url,
+                headers=self._build_headers(),
+                json=payload
+            )
             data = response.json()
             response_text = data["candidates"][0]["content"]["parts"][0]["text"]
 
         return self.response_parser(response_text) if params.structured_output else response_text
 
     async def generate_embeddings(self, texts):
-        headers = { "Content-Type": "application/json" }
         requests = []
         for text in texts:
             requests.append({
@@ -50,8 +56,13 @@ class GoogleAdapter(BaseAdapter):
             })
         payload = { "requests": requests }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self._embedding_url, headers=headers, json=payload, params={"key": self.api_key})
-            response.raise_for_status()
+            response = await self._request_with_retries(
+                client,
+                "POST",
+                self._embedding_url,
+                headers=self._build_headers(),
+                json=payload
+            )
             data = response.json()
 
         return [ result["values"] for result in data["embeddings"] ]

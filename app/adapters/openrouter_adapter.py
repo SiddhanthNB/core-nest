@@ -23,8 +23,13 @@ class OpenRouterAdapter(BaseAdapter):
             ]
         }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self._generation_url, headers=headers, json=payload)
-            response.raise_for_status()
+            response = await self._request_with_retries(
+                client,
+                "POST",
+                self._generation_url,
+                headers=headers,
+                json=payload,
+            )
             response = response.json()
             response = response["choices"][0]["message"]["content"]
 

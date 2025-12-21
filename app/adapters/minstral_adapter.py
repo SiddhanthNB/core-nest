@@ -25,8 +25,13 @@ class MinstralAdapter(BaseAdapter):
             ]
         }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self._generation_url, headers=headers, json=payload)
-            response.raise_for_status()
+            response = await self._request_with_retries(
+                client,
+                "POST",
+                self._generation_url,
+                headers=headers,
+                json=payload,
+            )
             data = response.json()
             response = data["choices"][0]["message"]["content"]
 
@@ -42,8 +47,13 @@ class MinstralAdapter(BaseAdapter):
             "input": texts,
         }
         async with httpx.AsyncClient() as client:
-            response = await client.post(self._embedding_url, headers=headers, json=payload)
-            response.raise_for_status()
+            response = await self._request_with_retries(
+                client,
+                "POST",
+                self._embedding_url,
+                headers=headers,
+                json=payload,
+            )
             data = response.json()
 
         return [ item["embedding"] for item in data["data"] ]
