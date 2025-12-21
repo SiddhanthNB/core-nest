@@ -1,7 +1,4 @@
-from fastapi import HTTPException
-from app.config.logger import logger
 from .base_service import BaseApiService
-from app.adapters import GoogleAdapter, OpenAIAdapter
 
 class EmbeddingsService(BaseApiService):
 

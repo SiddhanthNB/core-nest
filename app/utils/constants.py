@@ -13,11 +13,11 @@ APP_PORT = int(os.getenv('PORT', 3000))
 
 WEB_CONCURRENCY = int(os.getenv('WEB_CONCURRENCY', 1))
 
-SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
-SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL').replace('[YOUR-PASSWORD]', quote_plus(SUPABASE_DB_PASSWORD))
+SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD', '')
+SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL', '').replace('[YOUR-PASSWORD]', quote_plus(SUPABASE_DB_PASSWORD))
 
-REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
-REDIS_URL = os.getenv('REDIS_URL').replace('[YOUR-PASSWORD]', quote_plus(REDIS_PASSWORD))
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', '')
+REDIS_URL = os.getenv('REDIS_URL', '').replace('[YOUR-PASSWORD]', quote_plus(REDIS_PASSWORD))
 
 try:
     # Get absolute path to config file
