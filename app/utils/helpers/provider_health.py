@@ -16,7 +16,6 @@ _ADAPTERS: Dict[str, type] = {
 
 _EMBEDDING_ADAPTERS: Dict[str, type] = {
     "google": GoogleAdapter,
-    "openai": OpenAIAdapter,
     "minstral": MinstralAdapter,
 }
 
