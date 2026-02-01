@@ -128,7 +128,7 @@ All endpoints expect JSON and return `{ "success": true, "result": { ... } }` on
       "user_prompt": "Write a haiku about databases",
       "system_prompt": "You are a concise assistant",
       "structured_output": false,
-      "provider": "openai"
+      "provider": "google"
     }'
   ```
 - `POST /embeddings`
@@ -160,7 +160,7 @@ Misc:
 - `GET /` redirects to `/redoc`.
 
 ## Providers & prompts
-- Failover order (when `provider` is omitted): `groq -> google -> openrouter -> openai -> minstral -> cerebras`.
+- Failover order (when `provider` is omitted): `groq -> google -> openrouter -> minstral -> cerebras`.
 - Prompt templates live in `app/utils/prompts/{system_prompts,user_prompts}` and are loaded by services for summarization/sentiment flows.
 - Set `structured_output: true` to force JSON parsing of model responses (adapters attempt to extract JSON blocks).
 

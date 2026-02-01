@@ -44,6 +44,7 @@ class BaseApiService:
     async def _generate_embeddings(self, params):
         _providers_hash = {
             'google': GoogleAdapter,
+            'openai': OpenAIAdapter,
             'minstral': MinstralAdapter,
         }
 

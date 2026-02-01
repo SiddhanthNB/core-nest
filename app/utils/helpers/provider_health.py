@@ -9,7 +9,6 @@ _ADAPTERS: Dict[str, type] = {
     "google": GoogleAdapter,
     "groq": GroqAdapter,
     "openrouter": OpenRouterAdapter,
-    "openai": OpenAIAdapter,
     "minstral": MinstralAdapter,
     "cerebras": CerebrasAdapter,
 }
