@@ -3,7 +3,7 @@ from .groq_adapter import GroqAdapter
 from .huggingface_adapter import HuggingfaceAdapter
 from .openai_adapter import OpenAIAdapter
 from .openrouter_adapter import OpenRouterAdapter
-from .minstral_adapter import MinstralAdapter
+from .mistral_adapter import MistralAdapter
 from .cerebras_adapter import CerebrasAdapter
 
 __all__ = [
@@ -12,6 +12,6 @@ __all__ = [
     "HuggingfaceAdapter",
     "OpenAIAdapter",
     "OpenRouterAdapter",
-    "MinstralAdapter",
+    "MistralAdapter",
     "CerebrasAdapter"
 ]

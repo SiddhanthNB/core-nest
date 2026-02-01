@@ -1,7 +1,7 @@
 CoreNest
 ========
 
-CoreNest is a FastAPI-powered gateway that fronts multiple LLM providers (Google, OpenAI, OpenRouter, Groq, Mistral/Minstral, Cerebras, HuggingFace) behind a single, authenticated API. It ships with provider failover, Redis-backed auth + rate limiting, Postgres-backed request logging, and prompt packs for turnkey summarization and sentiment analysis.
+CoreNest is a FastAPI-powered gateway that fronts multiple LLM providers (Google, OpenRouter, Groq, Mistral, Cerebras, HuggingFace) behind a single, authenticated API. It ships with provider failover, Redis-backed auth + rate limiting, Postgres-backed request logging, and prompt packs for turnkey summarization and sentiment analysis.
 
 ## Contents
 - [Quick start](#quick-start)
@@ -51,7 +51,7 @@ Core settings live in environment variables and `app/utils/providers.yaml` (env 
 | `HUGGINGFACE_API_KEY` | HuggingFace key. | `...` |
 | `GROQ_API_KEY` | Groq key. | `...` |
 | `OPENROUTER_API_KEY` | OpenRouter key. | `...` |
-| `MINSTRAL_API_KEY` | Mistral key. | `...` |
+| `MISTRAL_API_KEY` | Mistral key. | `...` |
 | `CEREBRAS_API_KEY` | Cerebras key. | `...` |
 
 Optional: `CLIENT_ID`, `CLIENT_SECRET` (reserved for future use).
@@ -70,7 +70,7 @@ OPENAI_API_KEY=replace-me
 HUGGINGFACE_API_KEY=replace-me
 GROQ_API_KEY=replace-me
 OPENROUTER_API_KEY=replace-me
-MINSTRAL_API_KEY=replace-me
+MISTRAL_API_KEY=replace-me
 CEREBRAS_API_KEY=replace-me
 ```
 
@@ -160,7 +160,7 @@ Misc:
 - `GET /` redirects to `/redoc`.
 
 ## Providers & prompts
-- Failover order (when `provider` is omitted): `groq -> google -> openrouter -> minstral -> cerebras`.
+- Failover order (when `provider` is omitted): `groq -> google -> openrouter -> mistral -> cerebras`.
 - Prompt templates live in `app/utils/prompts/{system_prompts,user_prompts}` and are loaded by services for summarization/sentiment flows.
 - Set `structured_output: true` to force JSON parsing of model responses (adapters attempt to extract JSON blocks).
 

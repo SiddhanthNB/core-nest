@@ -2,15 +2,15 @@ import httpx
 from app.utils import constants
 from .base_adapter import BaseAdapter
 
-class MinstralAdapter(BaseAdapter):
+class MistralAdapter(BaseAdapter):
 
     def __init__(self):
         super().__init__()
-        self._api_key = constants.SERVICES["minstral"]["key"]
-        self._generation_url = constants.SERVICES["minstral"]["generation"]["url"]
-        self._embedding_url = constants.SERVICES["minstral"]["embedding"]["url"]
-        self.generation_model = constants.SERVICES["minstral"]["generation"]["model"]
-        self.embedding_model = constants.SERVICES["minstral"]["embedding"]["model"]
+        self._api_key = constants.SERVICES["mistral"]["key"]
+        self._generation_url = constants.SERVICES["mistral"]["generation"]["url"]
+        self._embedding_url = constants.SERVICES["mistral"]["embedding"]["url"]
+        self.generation_model = constants.SERVICES["mistral"]["generation"]["model"]
+        self.embedding_model = constants.SERVICES["mistral"]["embedding"]["model"]
 
     async def generate_response(self, params):
         headers = {

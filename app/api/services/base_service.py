@@ -7,7 +7,7 @@ from app.adapters import GoogleAdapter
 from app.adapters import GroqAdapter
 from app.adapters import OpenAIAdapter
 from app.adapters import OpenRouterAdapter
-from app.adapters import MinstralAdapter
+from app.adapters import MistralAdapter
 from app.adapters import CerebrasAdapter
 
 class BaseApiService:
@@ -21,7 +21,7 @@ class BaseApiService:
             'google': GoogleAdapter,
             'openrouter': OpenRouterAdapter,
             'openai': OpenAIAdapter,
-            'minstral': MinstralAdapter,
+            'mistral': MistralAdapter,
             'cerebras': CerebrasAdapter,
         }
 
@@ -45,7 +45,7 @@ class BaseApiService:
         _providers_hash = {
             'google': GoogleAdapter,
             'openai': OpenAIAdapter,
-            'minstral': MinstralAdapter,
+            'mistral': MistralAdapter,
         }
 
         adapter_class = _providers_hash.get(params.provider)

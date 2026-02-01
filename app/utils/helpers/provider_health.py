@@ -9,13 +9,13 @@ _ADAPTERS: Dict[str, type] = {
     "google": GoogleAdapter,
     "groq": GroqAdapter,
     "openrouter": OpenRouterAdapter,
-    "minstral": MinstralAdapter,
+    "mistral": MistralAdapter,
     "cerebras": CerebrasAdapter,
 }
 
 _EMBEDDING_ADAPTERS: Dict[str, type] = {
     "google": GoogleAdapter,
-    "minstral": MinstralAdapter,
+    "mistral": MistralAdapter,
 }
 
 
