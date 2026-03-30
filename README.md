@@ -34,7 +34,7 @@ python main.py        # runs uvicorn with reload in APP_ENV=development
 Docs live at `/redoc`; health at `/ping`.
 
 ## Configuration
-Core settings live in environment variables and `app/utils/providers.yaml` (env vars are interpolated into that file).
+Core settings live in environment variables and `lib/llm/providers.yaml` (env vars are interpolated into that file).
 
 ### Required environment
 | Variable | Purpose | Example |
@@ -75,7 +75,7 @@ CEREBRAS_API_KEY=replace-me
 ```
 
 ### Provider models & endpoints
-`app/utils/providers.yaml` defines default models and URLs per provider. Update this file (and restart) to switch models globally.
+`lib/llm/providers.yaml` defines default models and URLs per provider. Update this file (and restart) to switch models globally.
 
 ## Running the API
 Set `APP_ENV`, `PORT`, and `WEB_CONCURRENCY` in your `.env` (or export them) first.
@@ -161,14 +161,13 @@ Misc:
 
 ## Providers & prompts
 - Failover order (when `provider` is omitted): `groq -> google -> openrouter -> mistral -> cerebras`.
-- Prompt templates live in `app/utils/prompts/{system_prompts,user_prompts}` and are loaded by services for summarization/sentiment flows.
+- Prompt templates live in `lib/llm/prompts/{system_prompts,user_prompts}` and are loaded by services for summarization/sentiment flows.
 - Set `structured_output: true` to force JSON parsing of model responses (adapters attempt to extract JSON blocks).
 
 ## Observability
 - Logging: console logging configured in `app/config/logger.py`; daily rotation is wired but commented out.
-- API logging: middleware in `app/utils/helpers/api_logger.py` writes request metadata to Postgres (disabled in `development`).
+- API logging: middleware in `app/api/middleware.py` writes request metadata to Postgres (disabled in `development`).
 
 ## Project tasks
-- Invoke collection: `tasks.py` + `app/utils/tasks/one_time_tasks.py`.
+- Invoke collection: `tasks.py` + `lib/tasks`.
   - `inv one-time-tasks.create-client --name "<client>"`: create a client + API key.
-- Make targets: `make install_dependencies`, `make migration-upgrade`, etc. (see `Makefile`).

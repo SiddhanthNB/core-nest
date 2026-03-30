@@ -2,8 +2,8 @@
 Main entry point for CoreNest API
 """
 import uvicorn
-from app.api import create_app
-from app.utils import constants
+from app.api.core.factory import create_app
+from app.config import constants
 
 app = create_app()
 

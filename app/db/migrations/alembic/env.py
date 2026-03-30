@@ -1,9 +1,6 @@
 from logging.config import fileConfig
-import sys
 import os
-
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+import sys
 
 from alembic import context
 
@@ -11,9 +8,9 @@ from alembic import context
 project_root = os.path.join(os.path.dirname(__file__), '../../../..')
 sys.path.insert(0, project_root)
 
-from app.utils.constants import SUPABASE_DB_URL, PROJECT_NAME
-from app.db.models.base_model import Base
 import app.db.models
+from app.db import db
+from app.config.constants import PROJECT_NAME
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -26,7 +23,12 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-target_metadata = Base.metadata
+target_metadata = db.Model.metadata
+if not target_metadata.tables:
+    raise RuntimeError(
+        "No models were loaded into the shared Duo metadata. "
+        "Import every model module from app.db.models before running Alembic."
+    )
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -35,11 +37,19 @@ target_metadata = Base.metadata
 
 # Dynamic version table name based on project
 VERSION_TABLE = f"{PROJECT_NAME.lower()}__alembic_version"
+TABLE_PREFIX = f"{PROJECT_NAME.lower()}__"
+
+
+def include_name(name, type_, parent_names):
+    """Filter reflection to this project's tables before deep inspection."""
+    if type_ == "table":
+        return name.startswith(TABLE_PREFIX)
+    return True
 
 def include_object(object, name, type_, reflected, compare_to):
     """Only include objects that belong to this project"""
     if type_ == "table":
-        return name.startswith(PROJECT_NAME.lower())
+        return name.startswith(TABLE_PREFIX)
     return True
 
 
@@ -55,13 +65,16 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url") or SUPABASE_DB_URL
+    url = config.get_main_option("sqlalchemy.url")
+    if not url or url == "driver://user:pass@localhost/dbname":
+        url = db.sync_engine.url.render_as_string(hide_password=False)
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         version_table=VERSION_TABLE,
+        include_name=include_name,
         include_object=include_object
     )
 
@@ -76,15 +89,12 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    from sqlalchemy import create_engine
-
-    connectable = create_engine(SUPABASE_DB_URL)
-
-    with connectable.connect() as connection:
+    with db.sync_engine.connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             version_table=VERSION_TABLE,
+            include_name=include_name,
             include_object=include_object
         )
 

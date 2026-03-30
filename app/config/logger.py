@@ -1,8 +1,9 @@
 import os
 import logging
 from datetime import datetime
-from app.utils import constants
 from logging.handlers import TimedRotatingFileHandler
+
+from app.config import constants
 
 def _get_file_path(timestamp: str) -> str:
     return os.path.join(log_dir, f"{constants.PROJECT_NAME}.{timestamp}.log")

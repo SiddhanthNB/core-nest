@@ -1,16 +1,28 @@
-from sqlalchemy.sql import func
-from app.db.models import BaseModel
-from sqlalchemy import Column, Integer, String, Float, JSON, Boolean, DateTime
+from datetime import datetime
 
-class APILog(BaseModel):
+from duo_orm import DateTime, JSON, mapped_column
+from sqlalchemy import Float
+
+from app.db import db
+
+
+class APILog(db.Model):
     __tablename__ = "corenest__api_logs"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    path = Column(String, nullable=False)
-    method = Column(String, nullable=False)
-    success = Column(Boolean, nullable=False)
-    status_code = Column(Integer, nullable=True)
-    process_time = Column(Float, nullable=True)
-    rq_params = Column(JSON, nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    id: int = mapped_column(primary_key=True, autoincrement=True)
+    path: str
+    method: str
+    success: bool
+    status_code: int | None
+    process_time: float | None = mapped_column(Float, nullable=True)
+    rq_params: dict = mapped_column(JSON, nullable=False)
+    created_at: datetime = mapped_column(
+        DateTime(),
+        nullable=False,
+        info={"set_on": "create"},
+    )
+    updated_at: datetime = mapped_column(
+        DateTime(),
+        nullable=False,
+        info={"set_on": {"create", "update"}},
+    )

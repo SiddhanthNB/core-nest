@@ -1,4 +1,5 @@
 alembic==1.16.2
+duo-orm-preview @ git+https://github.com/SiddhanthNB/duo-orm-preview.git@v0.1.0
 fastapi==0.115.12
 httpx==0.28.1
 invoke==2.2.0

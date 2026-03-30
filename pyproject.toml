@@ -1,0 +1,27 @@
+[project]
+name = "core-nest"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic==1.16.2",
+    "duo-orm-preview",
+    "fastapi==0.115.12",
+    "httpx==0.28.1",
+    "invoke==2.2.0",
+    "psycopg[binary,pool]==3.1.18",
+    "python-dotenv==1.1.0",
+    "pyyaml==6.0.2",
+    "redis==6.4.0",
+    "sqlalchemy==2.0.39",
+    "tenacity==9.0.0",
+    "uvicorn==0.34.0",
+]
+
+[tool.uv.sources]
+duo-orm-preview = { git = "https://github.com/SiddhanthNB/duo-orm-preview.git", rev = "v0.1.0" }
+
+[tool.duo-orm]
+project_name = "corenest"
+db_dir = "app"

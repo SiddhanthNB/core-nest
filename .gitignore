@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 .vscode/
 TODO.md
+.DS_Store
+test_summary.md
