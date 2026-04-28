@@ -1,46 +1,39 @@
-services:
-  google:
-    key: "{GOOGLE_API_KEY}"
-    base_url: "https://generativelanguage.googleapis.com/v1beta/models/"
-    generation:
-      model: "gemini-2.5-flash-lite"
-      verb: ":generateContent"
-    embedding:
-      model: "gemini-embedding-001"
-      verb: ":batchEmbedContents"
+providers:
+  gemini:
+    api_key_env: GOOGLE_API_KEY
+    provider: gemini
+    models:
+      completion: gemini/gemini-2.5-flash-lite
+      embedding: gemini/gemini-embedding-001
   openai:
-    key: "{OPENAI_API_KEY}"
-    generation:
-      model: "gpt-4o-mini"
-      url: "https://api.openai.com/v1/chat/completions"
-    embedding:
-      model: "text-embedding-3-small"
-      url: "https://api.openai.com/v1/embeddings"
+    api_key_env: OPENAI_API_KEY
+    provider: openai
+    models:
+      completion: gpt-4o-mini
+      embedding: text-embedding-3-small
   huggingface:
-    key: "{HUGGINGFACE_API_KEY}"
-    generation:
-      model: "mistralai/Mistral-7B-Instruct-v0.3"
-      url: "https://router.huggingface.co/together/v1/chat/completions"
+    api_key_env: HUGGINGFACE_API_KEY
+    provider: huggingface
+    models:
+      completion: huggingface/mistralai/Mistral-7B-Instruct-v0.3
   groq:
-    key: "{GROQ_API_KEY}"
-    generation:
-      model: "llama-3.1-8b-instant"
-      url: "https://api.groq.com/openai/v1/chat/completions"
+    api_key_env: GROQ_API_KEY
+    provider: groq
+    models:
+      completion: groq/llama-3.1-8b-instant
   openrouter:
-    key: "{OPENROUTER_API_KEY}"
-    generation:
-      model: "google/gemma-3-27b-it:free"
-      url: "https://openrouter.ai/api/v1/chat/completions"
+    api_key_env: OPENROUTER_API_KEY
+    provider: openrouter
+    models:
+      completion: openrouter/google/gemma-3-27b-it:free
   mistral:
-    key: "{MISTRAL_API_KEY}"
-    embedding:
-      model: "mistral-embed"
-      url: "https://api.mistral.ai/v1/embeddings"
-    generation:
-      model: "ministral-8b-2410"
-      url: "https://api.mistral.ai/v1/chat/completions"
+    api_key_env: MISTRAL_API_KEY
+    provider: mistral
+    models:
+      completion: mistral/ministral-8b-2410
+      embedding: mistral/mistral-embed
   cerebras:
-    key: "{CEREBRAS_API_KEY}"
-    generation:
-      model: "gpt-oss-120b"
-      url: "https://api.cerebras.ai/v1/chat/completions"
+    api_key_env: CEREBRAS_API_KEY
+    provider: cerebras
+    models:
+      completion: cerebras/gpt-oss-120b

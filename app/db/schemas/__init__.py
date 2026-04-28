@@ -1,9 +1,9 @@
-from .api_logs import APILog as APILogSchema
+from .audit_logs import AuditLog as AuditLogSchema
 from .clients import Client as ClientSchema
 from .rate_limit_configs import RateLimitConfig as RateLimitConfigSchema
 
 __all__ = [
-    "APILogSchema",
+    "AuditLogSchema",
     "ClientSchema",
     "RateLimitConfigSchema",
 ]

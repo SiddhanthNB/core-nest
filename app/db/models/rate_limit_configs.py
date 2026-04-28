@@ -1,13 +1,11 @@
 import uuid
 from datetime import datetime
 
-from duo_orm import DateTime, mapped_column
-from sqlalchemy import ForeignKey, event
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from duo_orm import DateTime, ForeignKey, PG_UUID, mapped_column, relationship
+from sqlalchemy import event
 
 from app.db import db
-from app.db.events import flush_client_cache
+from lib.utils.cache_invalidation import flush_client_cache
 
 
 class RateLimitConfig(db.Model):
@@ -19,7 +17,7 @@ class RateLimitConfig(db.Model):
     requests_per_day: int | None
     concurrent_requests_limit: int | None
     client_id: uuid.UUID = mapped_column(
-        UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("corenest__clients.id"),
         nullable=False,
         unique=True,

@@ -7,3 +7,4 @@ __pycache__/
 TODO.md
 .DS_Store
 test_summary.md
+requirements/

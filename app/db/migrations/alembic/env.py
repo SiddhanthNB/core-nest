@@ -1,8 +1,10 @@
 from logging.config import fileConfig
 import os
 import sys
+from pathlib import Path
 
 from alembic import context
+from duo_orm.migrations.config import get_version_table
 
 # Add project root to path
 project_root = os.path.join(os.path.dirname(__file__), '../../../..')
@@ -35,8 +37,8 @@ if not target_metadata.tables:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-# Dynamic version table name based on project
-VERSION_TABLE = f"{PROJECT_NAME.lower()}__alembic_version"
+PYPROJECT_PATH = Path(project_root) / "pyproject.toml"
+VERSION_TABLE = get_version_table(pyproject_path=PYPROJECT_PATH)
 TABLE_PREFIX = f"{PROJECT_NAME.lower()}__"
 
 

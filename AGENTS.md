@@ -201,6 +201,21 @@ Preferred migration sequence:
 4. Normalize the migration layout only after the current history is preserved.
 5. Remove legacy DB bootstrap and base-model code once all imports are cut over.
 
+CLI policy:
+
+- use Duo ORM CLI commands for migration workflow
+- do not default to calling Alembic directly unless debugging or verifying
+  lower-level behavior
+
+Preferred commands:
+
+```bash
+duo-orm migration.history
+duo-orm migration.create "describe change"
+duo-orm migration.upgrade
+duo-orm migration.downgrade
+```
+
 ## Migration Layout Policy
 
 Layout changes are allowed if they do not break migration identity.
@@ -231,6 +246,13 @@ model/Alembic wiring before generating new migrations.
 The first post-cutover migration is a validation step. It is not the place for
 unintended schema drift.
 
+Validation example:
+
+```bash
+duo-orm migration.history
+alembic -c app/db/migrations/alembic.ini check
+```
+
 ## Service Layer Policy
 
 The service layer does not need to be rewritten simply because the database
@@ -258,3 +280,19 @@ This repository should eventually look like a Duo ORM-driven application with:
 
 Temporary hybrid states are acceptable only during migration. They are not the
 desired end state.
+
+## Application-Level Requirement Files
+
+Additional agent-facing requirement files now exist under `requirements/`.
+
+They define locked decisions for the next application-level workstreams:
+
+- `requirements/api-contract.md`
+- `requirements/request-flow.md`
+- `requirements/provider-routing.md`
+- `requirements/logging-audit.md`
+- `requirements/testing.md`
+
+Use those files for current API / logging / LiteLLM / retry / circuit-breaker
+implementation guidance. This file remains the source of truth for Duo ORM and
+migration-related architectural constraints.

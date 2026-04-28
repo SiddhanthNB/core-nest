@@ -1,10 +1,11 @@
-from .base import BaseApiService
+from .base_service import BaseService
 
-class EmbeddingsService(BaseApiService):
 
-    def __init__(self):
-        super().__init__()
-
-    async def dispatch(self, params):
-        payload = await self._generate_embeddings(params)
-        return { 'success': True, 'result': payload }
+class EmbeddingsService(BaseService):
+    async def dispatch(self, params, *, provider_preference: str | None = None, request=None):
+        return await self._fetch_embedding(
+            input_data=params.input,
+            request_params={},
+            provider_preference=provider_preference,
+            request=request,
+        )

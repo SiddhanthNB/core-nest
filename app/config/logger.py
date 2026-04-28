@@ -1,45 +1,55 @@
-import os
-import logging
-from datetime import datetime
-from logging.handlers import TimedRotatingFileHandler
+from __future__ import annotations
+
+import sys
+from typing import Any
+
+from loguru import logger as _loguru_logger
 
 from app.config import constants
 
-def _get_file_path(timestamp: str) -> str:
-    return os.path.join(log_dir, f"{constants.PROJECT_NAME}.{timestamp}.log")
 
-def _custom_namer(default_name: str) -> str:
-  try:
-      date_str = default_name.split('.')[-1]
-      return _get_file_path(timestamp=date_str)
-  except ValueError:
-      return default_name
+class _LoggerAdapter:
+    def __init__(self):
+        self._logger = _configure_logger()
 
-# setup directory
-log_dir = os.path.join(os.getcwd(), 'logs')
-os.makedirs(log_dir, exist_ok=True)
+    def bind(self, **kwargs: Any):
+        return self._logger.bind(**kwargs)
 
-# formatter
-formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s : %(message)s")
+    def debug(self, message: str, *args: Any, **kwargs: Any) -> None:
+        self._log("debug", message, *args, **kwargs)
 
-# rotation file handler
-file_handler = TimedRotatingFileHandler(
-	filename = _get_file_path(timestamp=datetime.now().strftime('%Y-%m-%d')),
-	when = 'midnight',
-	interval = 1,
-	utc = True,
-	backupCount = 7,
-	encoding = 'utf-8'
-)
-file_handler.namer = _custom_namer
-file_handler.setFormatter(formatter)
+    def info(self, message: str, *args: Any, **kwargs: Any) -> None:
+        self._log("info", message, *args, **kwargs)
 
-# standard out handler
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
+    def warning(self, message: str, *args: Any, **kwargs: Any) -> None:
+        self._log("warning", message, *args, **kwargs)
 
-# config
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO if constants.APP_ENV.lower() == 'production' else logging.DEBUG)
-# logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+    def error(self, message: str, *args: Any, **kwargs: Any) -> None:
+        self._log("error", message, *args, **kwargs)
+
+    def exception(self, message: str, *args: Any, **kwargs: Any) -> None:
+        self._logger.opt(exception=True).error(message, *args, **kwargs)
+
+    def _log(self, level: str, message: str, *args: Any, **kwargs: Any) -> None:
+        exc_info = kwargs.pop("exc_info", False)
+        bound_logger = self._logger
+        if exc_info:
+            bound_logger = bound_logger.opt(exception=True)
+        getattr(bound_logger, level)(message, *args, **kwargs)
+
+
+def _configure_logger():
+    _loguru_logger.remove()
+    _loguru_logger.add(
+        sys.stdout,
+        level="INFO" if constants.APP_ENV.lower() == "production" else "DEBUG",
+        serialize=constants.APP_ENV.lower() == "production",
+        format=(
+            "{time:YYYY-MM-DDTHH:mm:ss.SSSZ} | {level} | "
+            "{extra[event]} | request_id={extra[request_id]} | {message}"
+        ),
+    )
+    return _loguru_logger.bind(event="-", request_id="-")
+
+
+logger = _LoggerAdapter()

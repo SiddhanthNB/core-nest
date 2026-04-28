@@ -1,36 +1,48 @@
-from typing import List
+from __future__ import annotations
+
+from typing import Any
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Embeddings(BaseModel):
-    texts: List[str] = Field(..., description="List of input texts")
-    provider: str = Field(
-        ...,
-        description="The provider to use for generating embeddings",
-    )
+    input: str | list[str] = Field(..., description="Embedding input payload")
+    model: str | None = None
+    provider: str | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | dict[str, Any] | None = None
+    response_format: dict[str, Any] | None = None
+    stream: bool | None = None
 
-    @field_validator("texts")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @model_validator(mode="before")
     @classmethod
-    def validate_texts(cls, value: List[str]) -> List[str]:
-        if not value or len(value) == 0:
+    def normalize_legacy_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "input" not in data and "texts" in data:
+            normalized = dict(data)
+            normalized["input"] = normalized.pop("texts")
+            return normalized
+        return data
+
+    @field_validator("input")
+    @classmethod
+    def validate_input(cls, value: str | list[str]) -> str | list[str]:
+        if isinstance(value, list) and not value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="At least one string must be provided in 'texts'",
+                detail="At least one string must be provided in 'input'",
             )
         return value
 
-    @field_validator("provider")
-    @classmethod
-    def validate_provider(cls, value: str) -> str:
-        valid_providers = ["google", "mistral"]
-        if value not in valid_providers:
+    @model_validator(mode="after")
+    def validate_locked_fields(self):
+        forbidden = {"model", "provider", "tools", "tool_choice", "response_format", "stream"}
+        used = sorted(field for field in forbidden if field in self.__pydantic_fields_set__)
+        if used:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Provider '{value}' is not supported. "
-                    f"Supported providers are: {valid_providers}"
-                ),
+                detail=f"Unsupported request fields for /embeddings: {', '.join(used)}",
             )
-        return value
+        return self

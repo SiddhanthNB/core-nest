@@ -1,54 +1,29 @@
+from __future__ import annotations
+
 import os
 import time
-from types import SimpleNamespace
-from typing import Dict, List, Tuple
+from typing import Any
 
-from lib.llm.adapters.cerebras_adapter import CerebrasAdapter
-from lib.llm.adapters.google_adapter import GoogleAdapter
-from lib.llm.adapters.groq_adapter import GroqAdapter
-from lib.llm.adapters.mistral_adapter import MistralAdapter
-from lib.llm.adapters.openrouter_adapter import OpenRouterAdapter
-
-_ADAPTERS: Dict[str, type] = {
-    "google": GoogleAdapter,
-    "groq": GroqAdapter,
-    "openrouter": OpenRouterAdapter,
-    "mistral": MistralAdapter,
-    "cerebras": CerebrasAdapter,
-}
-
-_EMBEDDING_ADAPTERS: Dict[str, type] = {
-    "google": GoogleAdapter,
-    "mistral": MistralAdapter,
-}
+from app.config import constants
+from lib.llm.adapters import BaseAdapter, get_adapter
 
 
-def _build_params(provider: str) -> SimpleNamespace:
-    system_prompt = "You are a concise health-check responder."
-    user_prompt = (
-        f"Reply with exactly: pong from ({provider}). "
-        f"Example response: pong from ({provider}). No extra text."
-    )
-    return SimpleNamespace(
-        user_prompt=user_prompt,
-        system_prompt=system_prompt,
-        structured_output=False,
-        provider=provider,
-    )
-
-
-async def _check_completion(provider: str, adapter_cls) -> Dict:
-    adapter = adapter_cls()
-    params = _build_params(provider)
+async def _check_completion(provider: str, adapter: BaseAdapter) -> dict[str, Any]:
     started = time.perf_counter()
     try:
-        result = await adapter.generate_response(params)
+        result = await adapter.acompletion(
+            messages=[
+                {"role": "system", "content": "You are a concise health-check responder."},
+                {"role": "user", "content": f"Reply with exactly: pong from ({provider})."},
+            ],
+            request_params={"temperature": 0, "stream": False},
+        )
         latency_ms = int((time.perf_counter() - started) * 1000)
         return {
             "provider": provider,
             "status": "success",
             "latency_ms": latency_ms,
-            "result": result,
+            "result": result.model_dump(exclude_none=True) if hasattr(result, "model_dump") else result,
         }
     except Exception as exc:
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -60,12 +35,13 @@ async def _check_completion(provider: str, adapter_cls) -> Dict:
         }
 
 
-async def _check_embedding(provider: str, adapter_cls) -> Dict:
-    adapter = adapter_cls()
+async def _check_embedding(provider: str, adapter: BaseAdapter) -> dict[str, Any]:
     started = time.perf_counter()
     try:
-        # Minimal payload to reduce cost while confirming availability.
-        await adapter.generate_embeddings(["ping", "pong"])
+        await adapter.aembedding(
+            input_data=["ping", "pong"],
+            request_params={},
+        )
         latency_ms = int((time.perf_counter() - started) * 1000)
         return {
             "provider": provider,
@@ -82,7 +58,7 @@ async def _check_embedding(provider: str, adapter_cls) -> Dict:
         }
 
 
-def _format_section(title: str, results: List[Dict]) -> List[str]:
+def _format_section(title: str, results: list[dict[str, Any]]) -> list[str]:
     if not results:
         return []
 
@@ -103,8 +79,8 @@ def _format_section(title: str, results: List[Dict]) -> List[str]:
     return lines
 
 
-def _format_summary(results: Dict[str, List[Dict]]) -> str:
-    lines: List[str] = []
+def _format_summary(results: dict[str, list[dict[str, Any]]]) -> str:
+    lines: list[str] = []
     lines.append("## Provider Health Check")
     lines.append("")
     lines.extend(_format_section("Completions", results.get("completions", [])))
@@ -112,33 +88,32 @@ def _format_summary(results: Dict[str, List[Dict]]) -> str:
     return "\n".join(lines)
 
 
-def _write_summary(results: List[Dict]) -> None:
+def _write_summary(results: dict[str, list[dict[str, Any]]]) -> None:
     content = _format_summary(results)
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
     if summary_path:
-        with open(summary_path, "w", encoding="utf-8") as fh:
-            fh.write(content)
+        with open(summary_path, "a", encoding="utf-8") as handle:
+            handle.write(content + "\n")
     else:
         print(content)
 
 
-async def run_provider_health_check(write_summary: bool = True) -> Tuple[Dict[str, List[Dict]], bool]:
-    """
-    Run completion health checks across configured providers.
-    Returns (results, any_failures).
-    """
-    results: Dict[str, List[Dict]] = {"completions": [], "embeddings": []}
+async def run_provider_health_check(write_summary: bool = True):
+    results: dict[str, list[dict[str, Any]]] = {"completions": [], "embeddings": []}
 
-    for provider, adapter_cls in _ADAPTERS.items():
-        results["completions"].append(await _check_completion(provider, adapter_cls))
-
-    for provider, adapter_cls in _EMBEDDING_ADAPTERS.items():
-        results["embeddings"].append(await _check_embedding(provider, adapter_cls))
+    for provider in constants.PROVIDERS:
+        adapter = get_adapter(provider)
+        if adapter.has_capability("chat"):
+            results["completions"].append(await _check_completion(provider, adapter))
+        if adapter.has_capability("embedding"):
+            results["embeddings"].append(await _check_embedding(provider, adapter))
 
     if write_summary:
         _write_summary(results)
 
-    any_failures = any(item["status"] != "success" for item in results["completions"]) or any(
-        item["status"] != "success" for item in results["embeddings"]
+    any_failures = any(
+        item["status"] == "failure"
+        for section in results.values()
+        for item in section
     )
     return results, any_failures

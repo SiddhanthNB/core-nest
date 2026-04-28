@@ -1,20 +1,28 @@
-from app.config.logger import logger
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from fastapi import APIRouter, HTTPException, Depends, status
-from app.api.deps import apply_rate_limiting
+
+from app.config.logger import logger
 from app.api.services.embeddings import EmbeddingsService
 from app.api.validators import Embeddings
 
-router = APIRouter(tags=["embeddings"], dependencies=[Depends(apply_rate_limiting)])
+router = APIRouter(tags=["embeddings"])
 
-@router.post('/embeddings')
-async def create_embeddings(params: Embeddings):
+
+@router.post("/embeddings")
+async def create_embeddings(request: Request, params: Embeddings):
     try:
-        service = EmbeddingsService()
-        response = await service.dispatch(params)
+        response = await EmbeddingsService().dispatch(
+            params,
+            request=request,
+            provider_preference=request.headers.get("X-LLM-Provider"),
+        )
         return JSONResponse(content=response, status_code=status.HTTP_200_OK)
-    except Exception as e:
-        logger.error(f'Error: {str(e)}', exc_info=True)
-        status_code = e.status_code if isinstance(e, HTTPException) else status.HTTP_500_INTERNAL_SERVER_ERROR
-        content = e.detail if isinstance(e, HTTPException) else 'Internal Server Error'
-        return JSONResponse(content=content, status_code=status_code)
+    except Exception as exc:
+        logger.error(f"Error: {str(exc)}", exc_info=True)
+        if isinstance(exc, HTTPException):
+            detail = exc.detail if isinstance(exc.detail, dict) else {"detail": exc.detail}
+            return JSONResponse(content=detail, status_code=exc.status_code)
+        return JSONResponse(
+            content={"detail": "Internal Server Error"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

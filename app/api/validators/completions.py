@@ -1,51 +1,53 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import Any, Literal
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class Message(BaseModel):
+    role: Literal["system", "user", "assistant", "tool", "developer"]
+    content: str
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class Completions(BaseModel):
-    user_prompt: str = Field(..., description="User input prompt")
-    system_prompt: Optional[str] = Field(
-        default="You are a helpful assistant",
-        description="System prompt for the assistant",
-    )
-    structured_output: Optional[bool] = Field(
-        default=False,
-        description="Whether the output should be structured",
-    )
-    provider: Optional[str] = Field(
-        None,
-        description="The provider to use for completion",
-    )
+    messages: list[Message] = Field(..., description="OpenAI-like message list")
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, gt=0)
+    top_p: float | None = Field(default=None, ge=0, le=1)
+    stream: bool | None = None
+    stop: str | list[str] | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | dict[str, Any] | None = None
+    response_format: dict[str, Any] | None = None
+    model: str | None = None
+    provider: str | None = None
+    user_prompt: str | None = None
+    system_prompt: str | None = None
+    structured_output: bool | None = None
 
-    @field_validator("user_prompt")
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("messages")
     @classmethod
-    def validate_user_prompt(cls, value: str) -> str:
-        if not value or not value.strip():
+    def validate_messages(cls, value: list[Message]) -> list[Message]:
+        if not value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="'user_prompt' cannot be empty",
+                detail="'messages' must include at least one message",
             )
         return value
 
-    @field_validator("provider")
-    @classmethod
-    def validate_provider(cls, value: str | None) -> str | None:
-        valid_providers = [
-            "google",
-            "openrouter",
-            "huggingface",
-            "groq",
-            "mistral",
-            "cerebras",
-        ]
-        if value and value not in valid_providers:
+    @model_validator(mode="after")
+    def validate_locked_fields(self):
+        forbidden = {"model", "provider", "user_prompt", "system_prompt", "structured_output", "stream"}
+        used = sorted(field for field in forbidden if field in self.__pydantic_fields_set__)
+        if used:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Provider '{value}' is not supported. "
-                    f"Supported providers are: {valid_providers}"
-                ),
+                detail=f"Unsupported request fields for /completions: {', '.join(used)}",
             )
-        return value
+        return self
