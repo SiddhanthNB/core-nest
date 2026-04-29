@@ -5,55 +5,55 @@ from typing import Any
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.config import constants
+
+from .completions import _Message
+
 
 class Summarization(BaseModel):
-    text: str = Field(..., description="Text to be summarized")
+    messages: list[_Message] = Field(..., description="OpenAI-like message list without system messages")
     model: str | None = None
     provider: str | None = None
-    system_prompt: str | None = None
     temperature: float | None = None
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
-    response_format: dict[str, Any] | None = None
     stream: bool | None = None
+    stream_options: dict[str, Any] | None = None
+    response_format: dict[str, Any] | None = None
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("text")
+    @model_validator(mode="before")
     @classmethod
-    def validate_text(cls, value: str) -> str:
-        if not value or not value.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="'text' cannot be empty or blank",
-            )
-        return value
-
-    @field_validator("system_prompt")
-    @classmethod
-    def validate_system_prompt(cls, value: str | None) -> str | None:
-        if value is not None and not value.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="'system_prompt' cannot be blank",
-            )
-        return value
-
-    @model_validator(mode="after")
-    def validate_locked_fields(self):
-        forbidden = {
-            "model",
-            "provider",
-            "temperature",
-            "tools",
-            "tool_choice",
-            "response_format",
-            "stream",
-        }
-        used = sorted(field for field in forbidden if field in self.__pydantic_fields_set__)
+    def _validate_api_managed_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        forbidden = set(constants.API_MANAGED_PARAMS["summaries"]["blocked_params"])
+        used = sorted(field for field in forbidden if field in data)
         if used:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Locked request fields for /summaries: {', '.join(used)}",
             )
+        return data
+
+    @field_validator("messages")
+    @classmethod
+    def _validate_messages(cls, value: list[_Message]) -> list[_Message]:
+        if not value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="'messages' must include at least one message",
+            )
+        if any(message.role == "system" for message in value):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="System messages are not allowed for /summaries",
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _apply_defaults(self):
+        for field, value in constants.API_MANAGED_PARAMS["summaries"]["defaults"].items():
+            setattr(self, field, value)
         return self

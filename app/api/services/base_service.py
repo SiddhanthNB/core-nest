@@ -4,44 +4,27 @@ from collections.abc import Mapping
 from typing import Any
 
 from fastapi import HTTPException, status
+from litellm import BadRequestError, InvalidRequestError, UnsupportedParamsError, UnprocessableEntityError, get_supported_openai_params
 
 from app.config import constants
 from app.config.redis import redis_client
 from lib.llm.adapters import get_adapter
 
-_COMPLETION_PROVIDER_SEQUENCE = (
-    "openai",
-    "mistral",
-    "gemini",
-    "groq",
-    "openrouter",
-    "cerebras",
-    "huggingface",
-)
-_SUPPORTED_PROVIDERS = set(constants.PROVIDERS) | {"google"}
+_SUPPORTED_COMPLETION_PROVIDERS = set(constants.COMPLETION_PROVIDERS)
+_SUPPORTED_EMBEDDING_PROVIDERS = set(constants.EMBEDDING_PROVIDERS)
+_LITELLM_REQUEST_ERRORS = (BadRequestError, InvalidRequestError, UnsupportedParamsError, UnprocessableEntityError)
 
 
 class BaseService:
-    def _get_prompts(self, prompt_type: str, **kwargs):
-        base_path = constants.PROMPTS_DIR
-        system_prompts_path = base_path / "system_prompts"
-        user_prompts_path = base_path / "user_prompts"
-
-        def _load_and_format(file_path, **format_kwargs):
-            return file_path.read_text().strip().format(**format_kwargs)
-
-        system_prompt = _load_and_format(system_prompts_path / f"{prompt_type}.txt", **kwargs)
-        user_prompt = _load_and_format(user_prompts_path / f"{prompt_type}.txt", **kwargs)
-        return {"system_prompt": system_prompt, "user_prompt": user_prompt}
+    def _get_system_prompt(self, prompt_type: str, **kwargs) -> str:
+        system_prompts_path = constants.PROMPTS_DIR / "system_prompts"
+        return (system_prompts_path / f"{prompt_type}.txt").read_text().strip().format(**kwargs)
 
     def _message(self, role: str, content: str) -> dict[str, str]:
         return {"role": role, "content": content}
 
-    def _system_messages(self, *, app_system_prompt: str, user_system_prompt: str | None = None) -> list[dict[str, str]]:
-        messages = [self._message("system", app_system_prompt)]
-        if user_system_prompt:
-            messages.append(self._message("system", user_system_prompt))
-        return messages
+    def _system_messages(self, *, app_system_prompt: str) -> list[dict[str, str]]:
+        return [self._message("system", app_system_prompt)]
 
     def _provider_attempts(self, request: Any) -> list[dict[str, Any]]:
         if not request:
@@ -71,11 +54,26 @@ class BaseService:
         audit_context["response_meta"] = response_meta
         request.state.audit_context = audit_context
 
+    def _litellm_request_error(self, exc: Exception, *, provider: str, model: str, request_type: str) -> HTTPException:
+        if isinstance(exc, UnsupportedParamsError):
+            supported = get_supported_openai_params(
+                model=model,
+                custom_llm_provider=provider,
+                request_type=request_type,
+            )
+            detail = f"Provider '{provider}' does not support one or more request params."
+            if supported:
+                detail = f"{detail} Supported params: {', '.join(sorted(supported))}"
+            return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+        status_code = int(getattr(exc, "status_code", status.HTTP_400_BAD_REQUEST) or status.HTTP_400_BAD_REQUEST)
+        detail = str(exc)
+        return HTTPException(status_code=status_code, detail=detail)
+
     async def _fetch_completion(self, *, messages: list[dict[str, Any]], request_params: Mapping[str, Any], provider_preference: str | None, request: Any = None) -> dict[str, Any]:
-        if provider_preference and provider_preference not in _SUPPORTED_PROVIDERS:
+        if provider_preference and provider_preference not in _SUPPORTED_COMPLETION_PROVIDERS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported provider '{provider_preference}'")
 
-        providers = [provider_preference] if provider_preference else list(_COMPLETION_PROVIDER_SEQUENCE)
+        providers = [provider_preference] if provider_preference else list(constants.COMPLETION_PROVIDERS)
         provider_attempts = self._provider_attempts(request)
         last_error: Exception | None = None
 
@@ -97,7 +95,6 @@ class BaseService:
                 continue
 
             try:
-                adapter.validate_params("completion", request_params)
                 payload = await adapter.acompletion(messages=messages, request_params=request_params)
             except Exception as exc:
                 provider_attempts.append(
@@ -108,6 +105,13 @@ class BaseService:
                     self._set_response_meta(request, self._response_meta(provider_attempts, payload={}))
                     if isinstance(exc, HTTPException):
                         raise
+                    if isinstance(exc, _LITELLM_REQUEST_ERRORS):
+                        raise self._litellm_request_error(
+                            exc,
+                            provider=resolved_provider,
+                            model=model,
+                            request_type="chat_completion",
+                        ) from exc
                     raise HTTPException(
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                         detail=f"Provider '{resolved_provider}' failed",
@@ -120,6 +124,14 @@ class BaseService:
 
         self._set_response_meta(request, self._response_meta(provider_attempts, payload={}))
         if last_error is not None:
+            if isinstance(last_error, _LITELLM_REQUEST_ERRORS):
+                last_attempt = next((attempt for attempt in reversed(provider_attempts) if attempt.get("status") == "failed"), None)
+                raise self._litellm_request_error(
+                    last_error,
+                    provider=(last_attempt or {}).get("provider", "unknown"),
+                    model=(last_attempt or {}).get("model", "unknown"),
+                    request_type="chat_completion",
+                ) from last_error
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No provider could satisfy the request",
@@ -133,10 +145,10 @@ class BaseService:
         if not provider_preference:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="provider_preference is required for embeddings",
+                detail="X-LLM-Provider header is required for embeddings",
             )
-        if provider_preference not in _SUPPORTED_PROVIDERS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported provider '{provider_preference}'")
+        if provider_preference not in _SUPPORTED_EMBEDDING_PROVIDERS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported embedding provider '{provider_preference}'")
 
         provider_attempts = self._provider_attempts(request)
         adapter = get_adapter(provider_preference, redis=redis_client, request=request)
@@ -154,7 +166,6 @@ class BaseService:
             )
 
         try:
-            adapter.validate_params("embedding", request_params)
             payload = await adapter.aembedding(input_data=input_data, request_params=request_params)
         except Exception as exc:
             provider_attempts.append(
@@ -163,6 +174,13 @@ class BaseService:
             self._set_response_meta(request, self._response_meta(provider_attempts, payload={}))
             if isinstance(exc, HTTPException):
                 raise
+            if isinstance(exc, _LITELLM_REQUEST_ERRORS):
+                raise self._litellm_request_error(
+                    exc,
+                    provider=resolved_provider,
+                    model=model,
+                    request_type="embeddings",
+                ) from exc
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Provider '{resolved_provider}' failed",
@@ -173,15 +191,3 @@ class BaseService:
         )
         self._set_response_meta(request, self._response_meta(provider_attempts, payload=payload))
         return payload
-
-    def _completion_request_params(self, params: Any) -> dict[str, Any]:
-        return {
-            "temperature": params.temperature,
-            "max_tokens": params.max_tokens,
-            "top_p": params.top_p,
-            "stream": False,
-            "stop": params.stop,
-            "tools": params.tools,
-            "tool_choice": params.tool_choice,
-            "response_format": params.response_format,
-        }

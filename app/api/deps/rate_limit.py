@@ -16,6 +16,9 @@ async def _increment_with_expiry(key: str, ttl: int) -> int:
     return int(count)
 
 
+async def _decrement_concurrent_counter(key: str) -> None: await redis_client.decr(key)
+
+
 async def rate_limiter(request: Request, background_tasks: BackgroundTasks, current_client: ClientSchema.Read = Depends(auth)) -> None:
     """
     Apply rate limiting based on the resolved client schema.
@@ -74,10 +77,7 @@ async def rate_limiter(request: Request, background_tasks: BackgroundTasks, curr
                     detail="Too many concurrent requests",
                 )
 
-            async def decrement_concurrent_counter() -> None:
-                await redis_client.decr(concurrent_key)
-
-            background_tasks.add_task(decrement_concurrent_counter)
+            background_tasks.add_task(_decrement_concurrent_counter, concurrent_key)
     except HTTPException:
         raise
     except RedisError as exc:

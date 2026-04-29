@@ -16,3 +16,9 @@ class OpenRouterAdapter(BaseAdapter):
                 num_retries=0,
                 set_verbose=False,
             )
+        if self._embedding_model:
+            self._embedding_router = Router(
+                model_list=[{"model_name": self._embedding_model, "litellm_params": {"model": self._embedding_model, "api_key": api_key}}],
+                num_retries=0,
+                set_verbose=False,
+            )

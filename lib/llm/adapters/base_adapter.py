@@ -11,8 +11,6 @@ from litellm import (
     InternalServerError,
     RateLimitError,
     ServiceUnavailableError,
-    UnsupportedParamsError,
-    get_supported_openai_params,
 )
 from redis.asyncio import Redis
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
@@ -26,7 +24,7 @@ _CIRCUIT_FAILURE_TTL_SECONDS = 600
 _DEFAULT_RETRY_WAIT = wait_exponential_jitter(initial=0.2, max=0.8, jitter=0.02)
 
 
-RETRYABLE_PROVIDER_EXCEPTIONS = (
+_RETRYABLE_PROVIDER_EXCEPTIONS = (
     APIConnectionError,
     APIError,
     BadGatewayError,
@@ -34,9 +32,6 @@ RETRYABLE_PROVIDER_EXCEPTIONS = (
     RateLimitError,
     ServiceUnavailableError,
 )
-
-NON_RETRYABLE_PROVIDER_EXCEPTIONS = (UnsupportedParamsError,)
-
 
 class BaseAdapter:
     def __init__(self, *, provider_name: str, redis: Redis, request: Any = None):
@@ -60,35 +55,6 @@ class BaseAdapter:
     def _supports_embedding(self) -> bool:
         return self._embedding_router is not None and self._embedding_model is not None
 
-    def validate_params(self, capability: str, request_params: Mapping[str, Any]) -> None:
-        if capability == "completion":
-            if not self._supports_completion():
-                raise RuntimeError(f"Provider '{self._provider_name}' does not support completion")
-            model = self._completion_model
-            request_type = "chat_completion"
-        elif capability == "embedding":
-            if not self._supports_embedding():
-                raise RuntimeError(f"Provider '{self._provider_name}' does not support embedding")
-            model = self._embedding_model
-            request_type = "embeddings"
-        else:
-            raise ValueError(f"Unsupported capability '{capability}'")
-        supported = get_supported_openai_params(
-            model=model,
-            custom_llm_provider=self._provider_config.get("provider", self._provider_name),
-            request_type=request_type,
-        )
-        if not supported:
-            return
-        requested = [key for key, value in request_params.items() if value is not None and key not in {"messages", "input"}]
-        unsupported = [key for key in requested if key not in supported]
-        if unsupported:
-            raise UnsupportedParamsError(
-                message=f"Provider '{self._provider_name}' does not support params: {', '.join(unsupported)}",
-                llm_provider=self._provider_config.get("provider", self._provider_name),
-                model=model,
-            )
-
     async def is_circuit_open(self) -> bool:
         return bool(await self.redis.exists(f"circuit:{self._provider_name}:open"))
 
@@ -106,7 +72,7 @@ class BaseAdapter:
         try:
             result = await self._call_with_retry(operation)
         except Exception as exc:
-            if isinstance(exc, RETRYABLE_PROVIDER_EXCEPTIONS):
+            if isinstance(exc, _RETRYABLE_PROVIDER_EXCEPTIONS):
                 self._logger(event="retry_exhausted", provider=self._provider_name, error_type=type(exc).__name__).warning("Retry policy exhausted for provider")
             opened = await self._record_failure()
             self._logger(event="provider_attempt_failed", provider=self._provider_name, error_type=type(exc).__name__).warning("Provider attempt failed")
@@ -119,7 +85,7 @@ class BaseAdapter:
         return result
 
     async def _call_with_retry(self, operation: Any) -> Any:
-        async for attempt in AsyncRetrying(stop=stop_after_attempt(3), wait=self._wait_for_retry, retry=retry_if_exception_type(RETRYABLE_PROVIDER_EXCEPTIONS), reraise=True, before_sleep=self._before_retry_sleep()):
+        async for attempt in AsyncRetrying(stop=stop_after_attempt(3), wait=self._wait_for_retry, retry=retry_if_exception_type(_RETRYABLE_PROVIDER_EXCEPTIONS), reraise=True, before_sleep=self._before_retry_sleep()):
             with attempt:
                 return await operation()
 

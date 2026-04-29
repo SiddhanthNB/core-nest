@@ -1,0 +1,11 @@
+completion_providers:
+  - mistral
+  - google
+  - groq
+  - openrouter
+  - cerebras
+  - huggingface
+embedding_providers:
+  - google
+  - mistral
+  - openrouter

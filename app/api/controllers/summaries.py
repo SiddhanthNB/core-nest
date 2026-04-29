@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from app.config.logger import logger
-from app.api.services.summarization import SummarizationService
+from app.api.services.summarization_service import SummarizationService
 from app.api.validators import Summarization
 
 router = APIRouter(tags=["summaries"])
@@ -16,7 +17,7 @@ async def create_summaries(request: Request, params: Summarization):
             request=request,
             provider_preference=request.headers.get("X-LLM-Provider"),
         )
-        return JSONResponse(content=response, status_code=status.HTTP_200_OK)
+        return JSONResponse(content=jsonable_encoder(response), status_code=status.HTTP_200_OK)
     except Exception as exc:
         logger.error(f"Error: {str(exc)}", exc_info=True)
         if isinstance(exc, HTTPException):

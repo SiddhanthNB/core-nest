@@ -2,11 +2,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
-from .base_adapter import (
-    NON_RETRYABLE_PROVIDER_EXCEPTIONS,
-    RETRYABLE_PROVIDER_EXCEPTIONS,
-    BaseAdapter,
-)
+from .base_adapter import BaseAdapter
 from .cerebras_adapter import CerebrasAdapter
 from .google_adapter import GoogleAdapter
 from .groq_adapter import GroqAdapter
@@ -17,7 +13,6 @@ from .openrouter_adapter import OpenRouterAdapter
 
 _ADAPTERS = {
     "cerebras": CerebrasAdapter,
-    "gemini": GoogleAdapter,
     "google": GoogleAdapter,
     "groq": GroqAdapter,
     "huggingface": HuggingfaceAdapter,
@@ -39,9 +34,7 @@ __all__ = [
     "GroqAdapter",
     "HuggingfaceAdapter",
     "MistralAdapter",
-    "NON_RETRYABLE_PROVIDER_EXCEPTIONS",
     "OpenAIAdapter",
     "OpenRouterAdapter",
-    "RETRYABLE_PROVIDER_EXCEPTIONS",
     "get_adapter",
 ]

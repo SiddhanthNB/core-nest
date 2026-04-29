@@ -6,5 +6,5 @@ __pycache__/
 .vscode/
 TODO.md
 .DS_Store
-test_summary.md
+tmp/
 requirements/

@@ -72,13 +72,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    async def _run_background_tasks(
-        self,
-        existing_background: BackgroundTask | None,
-        request: Request,
-        process_time_ms: float,
-        status_code: int,
-    ) -> None:
+    async def _run_background_tasks(self, existing_background: BackgroundTask | None, request: Request, process_time_ms: float, status_code: int) -> None:
         if existing_background is not None:
             await existing_background()
         await self._push_log_into_db(
@@ -87,13 +81,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             status_code=status_code,
         )
 
-    async def _push_log_into_db(
-        self,
-        *,
-        request: Request,
-        process_time_ms: float,
-        status_code: int,
-    ) -> None:
+    async def _push_log_into_db(self, *, request: Request, process_time_ms: float, status_code: int) -> None:
         try:
             if request.url.path == "/ping" and request.method.lower() == "get":
                 return

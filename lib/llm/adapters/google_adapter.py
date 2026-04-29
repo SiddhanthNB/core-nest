@@ -8,7 +8,7 @@ from .base_adapter import BaseAdapter
 
 class GoogleAdapter(BaseAdapter):
     def __init__(self, *, redis: Redis, request: Any = None):
-        super().__init__(provider_name="gemini", redis=redis, request=request)
+        super().__init__(provider_name="google", redis=redis, request=request)
         api_key = self._api_key()
         if self._completion_model:
             self._completion_router = Router(

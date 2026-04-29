@@ -1,8 +1,11 @@
-from app.config.logger import logger
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from sqlalchemy import text
+
+from app.config.logger import logger
 from app.db import db
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,6 +22,7 @@ async def lifespan(app: FastAPI):
         logger.bind(event="app_started").info("Database connection pool is warm and ready.")
     except Exception as e:
         logger.bind(event="unexpected_error").error(f"Failed to warm up database connection pool: {e}", exc_info=True)
+        raise
 
     yield
 
