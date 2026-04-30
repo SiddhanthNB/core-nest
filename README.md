@@ -1,173 +1,280 @@
 CoreNest
 ========
 
-CoreNest is a FastAPI-powered gateway that fronts multiple LLM providers (Google, OpenRouter, Groq, Mistral, Cerebras, HuggingFace) behind a single, authenticated API. It ships with provider failover, Redis-backed auth + rate limiting, Postgres-backed request logging, and prompt packs for turnkey summarization and sentiment analysis.
+CoreNest is a FastAPI LLM gateway with:
 
-## Contents
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Running the API](#running-the-api)
-- [Database & migrations](#database--migrations)
-- [Authentication & rate limiting](#authentication--rate-limiting)
-- [Endpoints](#endpoints)
-- [Providers & prompts](#providers--prompts)
-- [Observability](#observability)
-- [Project tasks](#project-tasks)
-- [Roadmap](#roadmap)
+- multi-provider completions
+- provider-pinned embeddings
+- Redis-backed auth and rate limiting
+- Postgres audit logging
+- Duo ORM-managed models and migrations
 
-## Quick start
-Prereqs: Python 3.12, Postgres, Redis, and provider API keys.
+The public API is OpenAI-like. Successful responses are returned raw, without a custom success envelope.
+
+## Quick Start
+
+Prereqs:
+
+- Python 3.12+
+- Postgres
+- Redis
+- provider API keys for the providers you enable
 
 ```bash
-# Start from the sample env (contains all required keys)
 cp .env.sample .env
-
-# create and activate a virtualenv, then install deps
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# update .env values (see tables below)
-python main.py        # runs uvicorn with reload in APP_ENV=development
+uv sync
+uv run main.py
 ```
 
-Docs live at `/redoc`; health at `/ping`.
+Docs are served at `/docs`. Health is `GET /ping`.
 
-## Configuration
-Core settings live in environment variables and `lib/llm/providers.yaml` (env vars are interpolated into that file).
+## Environment
 
-### Required environment
-| Variable | Purpose | Example |
-| --- | --- | --- |
-| `APP_ENV` | `development` enables uvicorn reload and disables DB request logging. Default: `production`. | `development` |
-| `PORT` | HTTP port. | `3000` |
-| `WEB_CONCURRENCY` | Uvicorn workers when not in dev. | `2` |
-| `SUPABASE_DB_PASSWORD` | Postgres password (used to patch into `SUPABASE_DB_URL`). | `p@ss` |
-| `SUPABASE_DB_URL` | Postgres URL containing `[YOUR-PASSWORD]` placeholder. | `postgresql://user:[YOUR-PASSWORD]@host:5432/db` |
-| `REDIS_PASSWORD` | Redis password (used to patch into `REDIS_URL`). | `redis-pass` |
-| `REDIS_URL` | Redis URL containing `[YOUR-PASSWORD]` placeholder. | `redis://default:[YOUR-PASSWORD]@host:6379/0` |
-| `GOOGLE_API_KEY` | Gemini key. | `...` |
-| `OPENAI_API_KEY` | OpenAI key. | `...` |
-| `HUGGINGFACE_API_KEY` | HuggingFace key. | `...` |
-| `GROQ_API_KEY` | Groq key. | `...` |
-| `OPENROUTER_API_KEY` | OpenRouter key. | `...` |
-| `MISTRAL_API_KEY` | Mistral key. | `...` |
-| `CEREBRAS_API_KEY` | Cerebras key. | `...` |
+Core runtime settings come from `.env`.
 
-Optional: `CLIENT_ID`, `CLIENT_SECRET` (reserved for future use).
+Required base variables:
 
-Minimal `.env` skeleton (already stubbed in `.env.sample`):
 ```bash
 APP_ENV=development
 PORT=3000
 WEB_CONCURRENCY=2
+
 SUPABASE_DB_PASSWORD=replace-me
 SUPABASE_DB_URL=postgresql://user:[YOUR-PASSWORD]@host:5432/db
+
 REDIS_PASSWORD=replace-me
 REDIS_URL=redis://default:[YOUR-PASSWORD]@host:6379/0
-GOOGLE_API_KEY=replace-me
-OPENAI_API_KEY=replace-me
-HUGGINGFACE_API_KEY=replace-me
-GROQ_API_KEY=replace-me
-OPENROUTER_API_KEY=replace-me
-MISTRAL_API_KEY=replace-me
-CEREBRAS_API_KEY=replace-me
 ```
 
-### Provider models & endpoints
-`lib/llm/providers.yaml` defines default models and URLs per provider. Update this file (and restart) to switch models globally.
+Provider keys are only required for the providers you actually use:
 
-## Running the API
-Set `APP_ENV`, `PORT`, and `WEB_CONCURRENCY` in your `.env` (or export them) first.
 ```bash
-# dev with reload (reads env from .env)
-python main.py
-
-# or directly via uvicorn
-uvicorn main:app --reload --port 3000
-
-# production-style (APP_ENV=production, uses WEB_CONCURRENCY workers from env)
-python main.py
+GOOGLE_API_KEY=
+OPENAI_API_KEY=
+HUGGINGFACE_API_KEY=
+GROQ_API_KEY=
+OPENROUTER_API_KEY=
+MISTRAL_API_KEY=
+CEREBRAS_API_KEY=
 ```
 
-## Database & migrations
-- Connection: `SUPABASE_DB_URL` (converted to async psycopg URL internally).
-- Migrations: Alembic lives in `app/db/migrations`.
+## Startup Behavior
+
+`uv run main.py` starts Uvicorn from Python code so reload and worker settings stay environment-driven.
+
+Before the server starts, the app checks for pending migrations. If the database revision is behind the repo head, startup fails immediately.
+
+## Config Files
+
+Core config lives in:
+
+- [providers.yaml](/home/sid/my_stuff/repos/core-nest/lib/llm/providers.yaml)
+  - provider identity
+  - API key env var names
+  - default model IDs
+- [provider_policy.yaml](/home/sid/my_stuff/repos/core-nest/app/config/provider_policy.yaml)
+  - completion providers in fallback order
+  - embedding providers allowlist
+- [api_managed_params.yaml](/home/sid/my_stuff/repos/core-nest/app/config/api_managed_params.yaml)
+  - endpoint-owned params and defaults
+
+`providers.yaml` is explicit. Model IDs should be fully provider-prefixed where LiteLLM expects that. The app does not try to auto-prefix model names dynamically.
+
+## API Contract
+
+Authentication:
+
+```http
+Authorization: Bearer <API_KEY>
+```
+
+Optional routing header for completions and opinionated text endpoints:
+
+```http
+X-LLM-Provider: mistral
+```
+
+For `/embeddings`, `X-LLM-Provider` is required.
+
+### POST /completions
+
+Flexible OpenAI-like endpoint.
+
+Example:
+
+```bash
+curl -X POST http://localhost:3000/completions \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Write a haiku about databases"}
+    ],
+    "temperature": 0.7,
+    "max_tokens": 64
+  }'
+```
+
+Notes:
+
+- user supplies `messages`
+- app manages `model`, `provider`, `stream`, and `stream_options`
+- supported public params are OpenAI-like and validated at the API edge
+- provider-specific param support is left to LiteLLM at runtime
+
+### POST /embeddings
+
+Embedding-specific endpoint.
+
+Example:
+
+```bash
+curl -X POST http://localhost:3000/embeddings \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "X-LLM-Provider: google" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": ["hello world", "bye"]
+  }'
+```
+
+Notes:
+
+- `X-LLM-Provider` is required
+- no cross-provider fallback
+- app manages `model`
+
+### POST /sentiments
+
+Opinionated sentiment endpoint.
+
+Example:
+
+```bash
+curl -X POST http://localhost:3000/sentiments \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "I loved the product."}
+    ]
+  }'
+```
+
+Notes:
+
+- user must not send `system` messages
+- app injects the system prompt
+- app manages `model`, `temperature`, `tools`, `tool_choice`, `stream`, `stream_options`, `response_format`
+- response format is application-owned
+
+### POST /summaries
+
+Opinionated summarization endpoint.
+
+Example:
+
+```bash
+curl -X POST http://localhost:3000/summaries \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Summarize this long article..."}
+    ]
+  }'
+```
+
+Notes:
+
+- user must not send `system` messages
+- app injects the system prompt
+- app manages execution-policy fields the same way as `/sentiments`
+
+## Provider Routing
+
+Completion routing is policy-driven. The current fallback order lives in [provider_policy.yaml](/home/sid/my_stuff/repos/core-nest/app/config/provider_policy.yaml).
+
+If `X-LLM-Provider` is present:
+
+- only that provider is tried
+- no fallback is used
+
+If `X-LLM-Provider` is absent:
+
+- `/completions`, `/sentiments`, and `/summaries` use the configured completion provider order
+- `/embeddings` does not fallback across providers
+
+## Auth, Rate Limiting, and Audit
+
+- router-level dependency is `rate_limiter`
+- `rate_limiter` depends on `auth`
+- auth reads the bearer token, resolves the client, caches it in Redis, and attaches it to `request.state`
+- rate limits are enforced from the client’s `rate_limit_config`
+
+Audit logging:
+
+- one audit row per request/response cycle
+- table: `corenest__audit_logs`
+- stored metadata is compact and sanitized
+- `401` auth failures do not create audit rows
+- audit logging is skipped in `development`
+
+## Database and Migrations
+
+This repo uses Duo ORM as the database foundation while preserving the existing Alembic history.
 
 Common commands:
+
 ```bash
-# upgrade to latest
-alembic -c app/db/migrations/alembic.ini upgrade head
-# inspect history
-alembic -c app/db/migrations/alembic.ini history
+uv run duo-orm migration.history
+uv run duo-orm migration.upgrade
+uv run duo-orm migration.downgrade
 ```
 
-Tables:
-- `corenest__clients`: API clients + hashed keys.
-- `corenest__rate_limit_configs`: per-client rate limits.
-- `corenest__api_logs`: request metadata (persisted when not in dev).
+Low-level verification:
 
-## Authentication & rate limiting
-- Requests must include `Authorization: Bearer <API_KEY>`.
-- API keys are generated and stored hashed. Create one via Invoke:
-  ```bash
-  inv one-time-tasks.create-client --name "Acme Corp"
-  ```
-- Client lookups are cached in Redis with sliding TTL to reduce DB load.
-- Rate limiting is per client (minute/hour/day/concurrent) enforced via Redis; limits live in `corenest__rate_limit_configs`.
+```bash
+uv run .venv/bin/alembic -c app/db/migrations/alembic.ini current
+uv run .venv/bin/alembic -c app/db/migrations/alembic.ini check
+```
 
-## Endpoints
-All endpoints expect JSON and return `{ "success": true, "result": { ... } }` on success. Omit `provider` to use automatic failover.
+## Tasks
 
-- `POST /completions`
-  ```bash
-  curl -X POST http://localhost:3000/completions \
-    -H "Authorization: Bearer <API_KEY>" \
-    -H "Content-Type: application/json" \
-    -d '{
-      "user_prompt": "Write a haiku about databases",
-      "system_prompt": "You are a concise assistant",
-      "structured_output": false,
-      "provider": "google"
-    }'
-  ```
-- `POST /embeddings`
-  ```bash
-  curl -X POST http://localhost:3000/embeddings \
-    -H "Authorization: Bearer <API_KEY>" \
-    -H "Content-Type: application/json" \
-    -d '{ "texts": ["hello world", "bye"], "provider": "google" }'
-  ```
-- `POST /sentiments`
-  Uses predefined prompts and structured output for sentiment classification.
-  ```bash
-  curl -X POST http://localhost:3000/sentiments \
-    -H "Authorization: Bearer <API_KEY>" \
-    -H "Content-Type: application/json" \
-    -d '{ "text": "I loved the product!", "provider": "groq" }'
-  ```
-- `POST /summaries`
-  Summarization with built-in prompts.
-  ```bash
-  curl -X POST http://localhost:3000/summaries \
-    -H "Authorization: Bearer <API_KEY>" \
-    -H "Content-Type: application/json" \
-    -d '{ "text": "Long article text here" }'
-  ```
+Create a client:
 
-Misc:
-- `GET /ping` healthcheck.
-- `GET /` redirects to `/redoc`.
+```bash
+uv run invoke one-time-tasks.create-client --name "Acme Corp"
+```
 
-## Providers & prompts
-- Failover order (when `provider` is omitted): `groq -> google -> openrouter -> mistral -> cerebras`.
-- Prompt templates live in `lib/llm/prompts/{system_prompts,user_prompts}` and are loaded by services for summarization/sentiment flows.
-- Set `structured_output: true` to force JSON parsing of model responses (adapters attempt to extract JSON blocks).
+Provider health check:
 
-## Observability
-- Logging: console logging configured in `app/config/logger.py`; daily rotation is wired but commented out.
-- API logging: middleware in `app/api/middleware.py` writes request metadata to Postgres (disabled in `development`).
+```bash
+uv run invoke daily-tasks.provider-health-check
+```
 
-## Project tasks
-- Invoke collection: `tasks.py` + `lib/tasks`.
-  - `inv one-time-tasks.create-client --name "<client>"`: create a client + API key.
+This writes Markdown to `GITHUB_STEP_SUMMARY` when that environment variable is present.
+
+Audit cleanup:
+
+```bash
+uv run invoke daily-tasks.cleanup-audit-logs --retention-days 60
+```
+
+## Tests
+
+Run the test suite with:
+
+```bash
+uv run pytest
+```
+
+The current suite focuses on:
+
+- API contract validation
+- request flow
+- provider policy
+- middleware/audit behavior
+- provider health utility behavior
+
+Provider behavior itself is still verified manually when needed.
