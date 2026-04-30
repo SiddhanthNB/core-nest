@@ -235,8 +235,8 @@ uv run duo-orm migration.downgrade
 Low-level verification:
 
 ```bash
-uv run .venv/bin/alembic -c app/db/migrations/alembic.ini current
-uv run .venv/bin/alembic -c app/db/migrations/alembic.ini check
+uv run duo-orm migration.current
+uv run duo-orm migration.check
 ```
 
 ## Tasks

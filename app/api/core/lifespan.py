@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
+from duo_orm import text
 from fastapi import FastAPI
-from sqlalchemy import text
 
 from app.config.logger import logger
 from app.db import db

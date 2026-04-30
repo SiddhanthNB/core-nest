@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from litellm import UnsupportedParamsError
+from litellm.types.utils import Usage
 
 from app.api.services.completion_service import CompletionService
 from app.api.services.embeddings_service import EmbeddingsService
@@ -133,6 +134,25 @@ def test_summarization_validator_applies_api_managed_defaults() -> None:
     assert params.stream is False
     assert params.stream_options is None
     assert params.response_format is None
+
+
+def test_base_service_response_meta_normalizes_litellm_usage() -> None:
+    response_meta = CompletionService()._response_meta(
+        [{"provider": "mistral", "model": "mistral/ministral-8b-2410", "status": "succeeded"}],
+        payload={
+            "choices": [{"finish_reason": "stop"}],
+            "usage": Usage(prompt_tokens=10, completion_tokens=4, total_tokens=14),
+        },
+    )
+
+    assert response_meta == {
+        "provider_attempts": [
+            {"provider": "mistral", "model": "mistral/ministral-8b-2410", "status": "succeeded"}
+        ],
+        "attempt_count": 1,
+        "finish_reason": "stop",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
+    }
 
 
 @pytest.mark.asyncio

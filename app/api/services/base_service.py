@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from fastapi import HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from litellm import BadRequestError, InvalidRequestError, UnsupportedParamsError, UnprocessableEntityError, get_supported_openai_params
 
 from app.config import constants
@@ -44,7 +45,7 @@ class BaseService:
         if choices:
             response_meta["finish_reason"] = choices[0].get("finish_reason")
         if payload.get("usage") is not None:
-            response_meta["usage"] = payload["usage"]
+            response_meta["usage"] = jsonable_encoder(payload["usage"], exclude_none=True)
         return response_meta
 
     def _set_response_meta(self, request: Any, response_meta: dict[str, Any]) -> None:

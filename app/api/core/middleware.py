@@ -4,6 +4,7 @@ import uuid
 from typing import Any, Callable
 from fastapi import FastAPI
 from fastapi import Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.background import BackgroundTask
@@ -93,7 +94,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
                 return
 
             audit_context = getattr(request.state, "audit_context", {})
-            response_meta = dict(audit_context.get("response_meta") or {})
+            response_meta = jsonable_encoder(dict(audit_context.get("response_meta") or {}))
             response_meta.setdefault("provider_attempts", [])
             response_meta.setdefault(
                 "attempt_count",

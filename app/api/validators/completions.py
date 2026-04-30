@@ -65,6 +65,11 @@ class Completions(BaseModel):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="'messages' must include at least one message",
             )
+        if not any(message.role == "user" for message in value):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="'messages' must include at least one user message",
+            )
         return value
 
     @model_validator(mode="after")

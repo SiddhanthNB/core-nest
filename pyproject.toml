@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-duo-orm-preview = { git = "https://github.com/SiddhanthNB/duo-orm-preview.git", rev = "v0.1.1" }
+duo-orm-preview = { git = "https://github.com/SiddhanthNB/duo-orm-preview.git", rev = "v0.1.2" }
 
 [tool.duo-orm]
 db_dir = "app"

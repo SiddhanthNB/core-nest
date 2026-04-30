@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime
 
-from duo_orm import DateTime, ForeignKey, PG_JSONB, PG_UUID, String, mapped_column, relationship
-from sqlalchemy import Float
+from duo_orm import DateTime, Float, ForeignKey, PG_JSONB, PG_UUID, String, mapped_column, relationship
 
 from app.db import db
 

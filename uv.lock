@@ -300,7 +300,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = "==1.16.2" },
-    { name = "duo-orm-preview", git = "https://github.com/SiddhanthNB/duo-orm-preview.git?rev=v0.1.1" },
+    { name = "duo-orm-preview", git = "https://github.com/SiddhanthNB/duo-orm-preview.git?rev=v0.1.2" },
     { name = "fastapi", specifier = "==0.115.12" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "invoke", specifier = "==2.2.0" },
@@ -336,8 +336,8 @@ wheels = [
 
 [[package]]
 name = "duo-orm-preview"
-version = "0.1.1"
-source = { git = "https://github.com/SiddhanthNB/duo-orm-preview.git?rev=v0.1.1#f07836e5ae29b7f71c1d244fbf9ea000b2e42389" }
+version = "0.1.2"
+source = { git = "https://github.com/SiddhanthNB/duo-orm-preview.git?rev=v0.1.2#63b47372b1b336d9be42de110543d35847dae57c" }
 dependencies = [
     { name = "alembic" },
     { name = "invoke" },

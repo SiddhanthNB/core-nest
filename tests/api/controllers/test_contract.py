@@ -24,9 +24,20 @@ def _request(headers: dict[str, str] | None = None) -> Request:
 @pytest.mark.asyncio
 async def test_completions_controller_returns_raw_payload(mocker) -> None:
     payload = {"id": "cmpl_1", "object": "chat.completion", "model": "gpt-4o-mini", "choices": []}
+
+    async def _dispatch(params, request, provider_preference=None):
+        request.state.audit_context = {
+            "response_meta": {
+                "provider_attempts": [
+                    {"provider": "openai", "model": "openai/gpt-4o-mini", "status": "succeeded"}
+                ]
+            }
+        }
+        return payload
+
     mocker.patch(
         "app.api.services.completion_service.CompletionService.dispatch",
-        new=mocker.AsyncMock(return_value=payload),
+        new=mocker.AsyncMock(side_effect=_dispatch),
     )
 
     response = await create_completions(
@@ -36,6 +47,8 @@ async def test_completions_controller_returns_raw_payload(mocker) -> None:
 
     assert response.status_code == 200
     assert response.body == b'{"id":"cmpl_1","object":"chat.completion","model":"gpt-4o-mini","choices":[]}'
+    assert response.headers["X-LLM-Provider"] == "openai"
+    assert response.headers["X-LLM-Model"] == "openai/gpt-4o-mini"
 
 
 @pytest.mark.asyncio
@@ -73,6 +86,13 @@ def test_embeddings_validator_rejects_legacy_texts_alias() -> None:
         Embeddings.model_validate({"texts": ["hello"]})
 
 
+def test_completions_validator_requires_user_message() -> None:
+    with pytest.raises(Exception) as exc_info:
+        Completions.model_validate({"messages": [{"role": "system", "content": "only system"}]})
+
+    assert "'messages' must include at least one user message" in str(exc_info.value)
+
+
 def test_sentiments_validator_rejects_system_messages() -> None:
     with pytest.raises(Exception) as exc_info:
         Sentiments.model_validate({"messages": [{"role": "system", "content": "override"}, {"role": "user", "content": "great product"}]})
@@ -90,9 +110,20 @@ def test_summaries_validator_rejects_system_messages() -> None:
 @pytest.mark.asyncio
 async def test_embeddings_controller_accepts_input_shape(mocker) -> None:
     payload = {"object": "list", "data": [{"embedding": [0.1, 0.2], "index": 0}], "model": "text-embedding-3-small"}
+
+    async def _dispatch(params, request, provider_preference=None):
+        request.state.audit_context = {
+            "response_meta": {
+                "provider_attempts": [
+                    {"provider": "openai", "model": "openai/text-embedding-3-small", "status": "succeeded"}
+                ]
+            }
+        }
+        return payload
+
     mocker.patch(
         "app.api.services.embeddings_service.EmbeddingsService.dispatch",
-        new=mocker.AsyncMock(return_value=payload),
+        new=mocker.AsyncMock(side_effect=_dispatch),
     )
 
     response = await create_embeddings(
@@ -102,6 +133,8 @@ async def test_embeddings_controller_accepts_input_shape(mocker) -> None:
 
     assert response.status_code == 200
     assert response.body == b'{"object":"list","data":[{"embedding":[0.1,0.2],"index":0}],"model":"text-embedding-3-small"}'
+    assert response.headers["X-LLM-Provider"] == "openai"
+    assert response.headers["X-LLM-Model"] == "openai/text-embedding-3-small"
 
 
 @pytest.mark.asyncio
