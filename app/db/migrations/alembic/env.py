@@ -12,7 +12,6 @@ sys.path.insert(0, project_root)
 
 import app.db.models
 from app.db import db
-from app.config.constants import PROJECT_NAME
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -39,7 +38,13 @@ if not target_metadata.tables:
 
 PYPROJECT_PATH = Path(project_root) / "pyproject.toml"
 VERSION_TABLE = get_version_table(pyproject_path=PYPROJECT_PATH)
-TABLE_PREFIX = f"{PROJECT_NAME.lower()}__"
+_VERSION_TABLE_SUFFIX = "alembic_version"
+TABLE_PREFIX = VERSION_TABLE.removesuffix(_VERSION_TABLE_SUFFIX)
+if TABLE_PREFIX == VERSION_TABLE or not TABLE_PREFIX.endswith("__"):
+    raise RuntimeError(
+        f"Could not derive table prefix from version table '{VERSION_TABLE}'. "
+        f"Expected a name ending with '{_VERSION_TABLE_SUFFIX}'."
+    )
 
 
 def include_name(name, type_, parent_names):
