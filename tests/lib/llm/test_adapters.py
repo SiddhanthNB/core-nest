@@ -10,10 +10,10 @@ from lib.llm.adapters.openrouter_adapter import OpenRouterAdapter
 
 
 class _Router:
-    def __init__(self, *, model_list, num_retries, set_verbose):
+    def __init__(self, *, model_list, set_verbose, **kwargs):
         self.model_list = model_list
-        self.num_retries = num_retries
         self.set_verbose = set_verbose
+        self.kwargs = kwargs
 
 
 async def _redis():

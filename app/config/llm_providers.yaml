@@ -1,4 +1,10 @@
 providers:
+  mistral:
+    api_key_env: MISTRAL_API_KEY
+    provider: mistral
+    models:
+      completion: mistral/ministral-8b-2410
+      embedding: mistral/mistral-embed
   google:
     api_key_env: GOOGLE_API_KEY
     provider: google
@@ -6,16 +12,12 @@ providers:
       completion: gemini/gemini-2.5-flash-lite
       embedding: gemini/gemini-embedding-001
   openai:
+    enabled: false
     api_key_env: OPENAI_API_KEY
     provider: openai
     models:
       completion: openai/gpt-4o-mini
       embedding: openai/text-embedding-3-small
-  huggingface:
-    api_key_env: HUGGINGFACE_API_KEY
-    provider: huggingface
-    models:
-      completion: huggingface/google/gemma-4-31B-it
   groq:
     api_key_env: GROQ_API_KEY
     provider: groq
@@ -27,14 +29,13 @@ providers:
     models:
       completion: openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
       embedding: openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free
-  mistral:
-    api_key_env: MISTRAL_API_KEY
-    provider: mistral
-    models:
-      completion: mistral/ministral-8b-2410
-      embedding: mistral/mistral-embed
   cerebras:
     api_key_env: CEREBRAS_API_KEY
     provider: cerebras
     models:
       completion: cerebras/llama3.1-8b
+  huggingface:
+    api_key_env: HUGGINGFACE_API_KEY
+    provider: huggingface
+    models:
+      completion: huggingface/google/gemma-4-31B-it

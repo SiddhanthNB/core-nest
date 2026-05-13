@@ -68,17 +68,16 @@ Before the server starts, the app checks for pending migrations. If the database
 
 Core config lives in:
 
-- [providers.yaml](/home/sid/my_stuff/repos/core-nest/lib/llm/providers.yaml)
+- [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml)
   - provider identity
   - API key env var names
   - default model IDs
-- [provider_policy.yaml](/home/sid/my_stuff/repos/core-nest/app/config/provider_policy.yaml)
-  - completion providers in fallback order
-  - embedding providers allowlist
-- [api_managed_params.yaml](/home/sid/my_stuff/repos/core-nest/app/config/api_managed_params.yaml)
+  - provider enablement
+  - fallback order by provider declaration order
+- [api_managed_params.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/api_managed_params.yaml)
   - endpoint-owned params and defaults
 
-`providers.yaml` is explicit. Model IDs should be fully provider-prefixed where LiteLLM expects that. The app does not try to auto-prefix model names dynamically.
+`llm_providers.yaml` is explicit. Model IDs should be fully provider-prefixed where LiteLLM expects that. The app does not try to auto-prefix model names dynamically.
 
 ## API Contract
 
@@ -193,7 +192,7 @@ Notes:
 
 ## Provider Routing
 
-Completion routing is policy-driven. The current fallback order lives in [provider_policy.yaml](/home/sid/my_stuff/repos/core-nest/app/config/provider_policy.yaml).
+Completion routing is config-driven. Enabled providers are derived from [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml). Completion fallback order follows provider declaration order for enabled providers with a completion model. Embedding providers are enabled providers with an embedding model.
 
 If `X-LLM-Provider` is present:
 

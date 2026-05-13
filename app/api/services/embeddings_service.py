@@ -2,8 +2,8 @@ from .base_service import BaseService
 
 
 class EmbeddingsService(BaseService):
-    def _request_params(self, _params) -> dict:
-        return {}
+    def _request_params(self, params) -> dict:
+        return params.model_dump(exclude={"input", "model"})
 
     async def dispatch(self, params, *, provider_preference: str | None = None, request=None):
         return await self._fetch_embedding(
