@@ -1,10 +1,59 @@
+# Environment and secrets
 .env
+.env.*
+!.env.sample
+
+# Python bytecode
 __pycache__/
-*.pyc
-*.log
+*.py[cod]
+*$py.class
+
+# Virtual environments
 .venv/
-.vscode/
-TODO.md
-.DS_Store
+venv/
+env/
+ENV/
+
+# Test, lint, and type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.hypothesis/
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Build and packaging artifacts
+build/
+dist/
+site/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Runtime logs
+logs/
+*.log
+
+# Local temporary files
 tmp/
-requirements/
+temp/
+*.tmp
+*.swp
+*.swo
+
+# IDE and editor settings
+.vscode/
+.idea/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Extras
+.codex
+AGENTS.md
