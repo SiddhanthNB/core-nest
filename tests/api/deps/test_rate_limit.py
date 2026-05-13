@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -17,8 +17,8 @@ def _request() -> Request:
     return Request({"type": "http", "headers": []})
 
 
-def _client_schema(*, requests_per_minute: int | None = None, requests_per_hour: int | None = None, requests_per_day: int | None = None, concurrent_requests_limit: int | None = None):
-    now = datetime.now(timezone.utc)
+def _client_schema(*, requests_per_minute: int | None = None, requests_per_hour: int | None = None, requests_per_day: int | None = None, concurrent_requests_limit: int | None = None):  # fmt: skip
+    now = datetime.now(UTC)
     return SimpleNamespace(
         id=uuid4(),
         rate_limit_config=SimpleNamespace(

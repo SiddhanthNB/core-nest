@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -13,7 +13,7 @@ from app.db.schemas.clients import Client as ClientSchema
 
 
 def _cached_client_json() -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     client = SimpleNamespace(
         id=uuid4(),
         name="Integration Client",

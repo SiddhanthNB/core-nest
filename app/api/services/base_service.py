@@ -4,10 +4,18 @@ from collections.abc import Mapping
 from typing import Any
 
 from fastapi import HTTPException, status
-from litellm import BadRequestError, InvalidRequestError, JSONSchemaValidationError, UnsupportedParamsError, UnprocessableEntityError
+from litellm import (
+    BadRequestError,
+    InvalidRequestError,
+    JSONSchemaValidationError,
+    UnprocessableEntityError,
+    UnsupportedParamsError,
+)
 
 from app.config import constants
 from app.config.redis import redis_client
+from lib.llm.adapters import get_adapter
+
 from ._helpers import (
     _expects_json_response,
     _litellm_request_error,
@@ -17,7 +25,6 @@ from ._helpers import (
     _set_response_meta,
     _validate_json_response_payload,
 )
-from lib.llm.adapters import get_adapter
 
 _SUPPORTED_COMPLETION_PROVIDERS = set(constants.COMPLETION_PROVIDERS)
 _SUPPORTED_EMBEDDING_PROVIDERS = set(constants.EMBEDDING_PROVIDERS)
@@ -35,9 +42,11 @@ class BaseService:
     def _system_messages(self, *, app_system_prompt: str) -> list[dict[str, str]]:
         return [self._message("system", app_system_prompt)]
 
-    async def _fetch_completion(self, *, messages: list[dict[str, Any]], request_params: Mapping[str, Any], provider_preference: str | None, request: Any = None) -> dict[str, Any]:
+    async def _fetch_completion(self, *, messages: list[dict[str, Any]], request_params: Mapping[str, Any], provider_preference: str | None, request: Any = None) -> dict[str, Any]:  # fmt: skip
         if provider_preference and provider_preference not in _SUPPORTED_COMPLETION_PROVIDERS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported provider '{provider_preference}'")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported provider '{provider_preference}'"
+            )
 
         providers = await _ordered_completion_providers(provider_preference, redis_client=redis_client, request=request)
         provider_attempts = _provider_attempts(request)
@@ -112,7 +121,9 @@ class BaseService:
         _set_response_meta(request, _response_meta(provider_attempts, payload={}))
         if last_error is not None:
             if isinstance(last_error, _LITELLM_REQUEST_ERRORS):
-                last_attempt = next((attempt for attempt in reversed(provider_attempts) if attempt.get("status") == "failed"), None)
+                last_attempt = next(
+                    (attempt for attempt in reversed(provider_attempts) if attempt.get("status") == "failed"), None
+                )
                 raise _litellm_request_error(
                     last_error,
                     provider=(last_attempt or {}).get("provider", "unknown"),
@@ -128,14 +139,17 @@ class BaseService:
             detail="No provider could satisfy the request",
         )
 
-    async def _fetch_embedding(self, *, input_data: str | list[str], request_params: Mapping[str, Any], provider_preference: str | None, request: Any = None) -> dict[str, Any]:
+    async def _fetch_embedding(self, *, input_data: str | list[str], request_params: Mapping[str, Any], provider_preference: str | None, request: Any = None) -> dict[str, Any]:  # fmt: skip
         if not provider_preference:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="X-LLM-Provider header is required for embeddings",
             )
         if provider_preference not in _SUPPORTED_EMBEDDING_PROVIDERS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported embedding provider '{provider_preference}'")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported embedding provider '{provider_preference}'",
+            )
 
         provider_attempts = _provider_attempts(request)
         adapter = get_adapter(provider_preference, redis=redis_client, request=request)
@@ -173,8 +187,6 @@ class BaseService:
                 detail=f"Provider '{resolved_provider}' failed",
             ) from exc
 
-        provider_attempts.append(
-            {"provider": resolved_provider, "model": model, "status": "succeeded"}
-        )
+        provider_attempts.append({"provider": resolved_provider, "model": model, "status": "succeeded"})
         _set_response_meta(request, _response_meta(provider_attempts, payload=payload))
         return payload

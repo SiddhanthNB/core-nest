@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -22,7 +21,7 @@ def _request_with_auth(token: str = "secret-key") -> Request:
 
 
 def _client_payload() -> SimpleNamespace:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return SimpleNamespace(
         id=uuid4(),
         name="Test Client",
@@ -58,7 +57,7 @@ async def test_auth_uses_cache_and_attaches_request_state(mocker) -> None:
 
     assert request.state.client == client
     touch_cache.assert_awaited_once_with(
-        f"client:{hashlib.sha256('secret-key'.encode()).hexdigest()}",
+        f"client:{hashlib.sha256(b'secret-key').hexdigest()}",
         ttl=CACHE_TTL,
     )
     set_cache.assert_not_called()

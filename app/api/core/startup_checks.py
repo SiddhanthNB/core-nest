@@ -23,6 +23,4 @@ def ensure_no_pending_migrations() -> None:
 
     head_revision = script.get_current_head()
     if current_revision != head_revision:
-        raise RuntimeError(
-            f"Pending migrations detected: current={current_revision}, head={head_revision}"
-        )
+        raise RuntimeError(f"Pending migrations detected: current={current_revision}, head={head_revision}")

@@ -1,18 +1,20 @@
 import json
 import time
 import uuid
-from typing import Any, Callable
-from fastapi import FastAPI
-from fastapi import Request, status
+from collections.abc import Callable
+from typing import Any
+
+from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import constants
 from app.config.logger import logger
 from app.db.models.audit_logs import AuditLog
+
 
 class _APILoggerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
@@ -73,7 +75,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    async def _run_background_tasks(self, existing_background: BackgroundTask | None, request: Request, process_time_ms: float, status_code: int) -> None:
+    async def _run_background_tasks(self, existing_background: BackgroundTask | None, request: Request, process_time_ms: float, status_code: int) -> None:  # fmt: skip
         if existing_background is not None:
             await existing_background()
         await self._push_log_into_db(
@@ -101,11 +103,19 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
                 len([attempt for attempt in response_meta["provider_attempts"] if attempt.get("status") != "skipped"]),
             )
             final_attempt = next(
-                (attempt for attempt in reversed(response_meta["provider_attempts"]) if attempt.get("status") == "succeeded"),
+                (
+                    attempt
+                    for attempt in reversed(response_meta["provider_attempts"])
+                    if attempt.get("status") == "succeeded"
+                ),
                 None,
             )
             last_failed_attempt = next(
-                (attempt for attempt in reversed(response_meta["provider_attempts"]) if attempt.get("status") == "failed"),
+                (
+                    attempt
+                    for attempt in reversed(response_meta["provider_attempts"])
+                    if attempt.get("status") == "failed"
+                ),
                 None,
             )
             audit_payload = {
@@ -125,7 +135,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
                 success=status_code < 400,
                 status_code=status_code,
                 process_time_ms=process_time_ms,
-                error=(last_failed_attempt or {}).get("error") or (f"HTTP {status_code}" if status_code >= 400 else None),
+                error=(last_failed_attempt or {}).get("error") or (f"HTTP {status_code}" if status_code >= 400 else None),  # fmt: skip
                 request_meta=audit_payload["request_meta"],
                 response_meta=audit_payload["response_meta"],
             )
@@ -142,7 +152,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
         except Exception:
             return {}
 
-    def _build_audit_context(self, *, request: Request, request_id: str, request_body: dict[str, Any]) -> dict[str, Any]:
+    def _build_audit_context(self, *, request: Request, request_id: str, request_body: dict[str, Any]) -> dict[str, Any]:  # fmt: skip
         return {
             "request_id": request_id,
             "request_meta": self._request_meta(request, request_body),
@@ -165,6 +175,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
         if request_body.get("input") is not None:
             request_meta["input_count"] = len(request_body["input"]) if isinstance(request_body["input"], list) else 1
         return request_meta
+
 
 def register_middleware(app: FastAPI) -> None:
     app.add_middleware(

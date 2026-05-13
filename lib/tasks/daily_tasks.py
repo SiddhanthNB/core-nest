@@ -1,6 +1,8 @@
 import asyncio
-from invoke.tasks import task
+
 from invoke.collection import Collection
+from invoke.tasks import task
+
 from lib.utils.audit_cleanup import cleanup_audit_logs
 from lib.utils.provider_health import _write_summary, provider_health_check
 
@@ -43,6 +45,6 @@ def cleanup_audit_logs_task(ctx, retention_days: int = 60):
     print(f"Deleted {deleted} audit log rows older than {retention_days} days")
 
 
-daily_tasks_ns = Collection('daily-tasks')
-daily_tasks_ns.add_task(provider_health_check_task, 'provider-health-check')
-daily_tasks_ns.add_task(cleanup_audit_logs_task, 'cleanup-audit-logs')
+daily_tasks_ns = Collection("daily-tasks")
+daily_tasks_ns.add_task(provider_health_check_task, "provider-health-check")
+daily_tasks_ns.add_task(cleanup_audit_logs_task, "cleanup-audit-logs")

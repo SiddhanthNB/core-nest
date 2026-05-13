@@ -1,32 +1,33 @@
 import os
+import tomllib
 from pathlib import Path
+from urllib.parse import quote_plus
+
 import yaml
 from dotenv import load_dotenv
 from fastapi import HTTPException, status
-from urllib.parse import quote_plus
 
 load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LLM_DIR = REPO_ROOT / "lib" / "llm"
 PROMPTS_DIR = LLM_DIR / "prompts"
+PYPROJECT_TOML_PATH = REPO_ROOT / "pyproject.toml"
 LLM_PROVIDERS_CONFIG_PATH = REPO_ROOT / "app" / "config" / "llm_providers.yaml"
 API_MANAGED_PARAMS_CONFIG_PATH = REPO_ROOT / "app" / "config" / "api_managed_params.yaml"
 
-PROJECT_NAME = 'corenest'
+APP_ENV = os.getenv("APP_ENV", "production")
+APP_PORT = int(os.getenv("PORT", 3000))
 
-APP_ENV = os.getenv('APP_ENV', 'production')
-APP_PORT = int(os.getenv('PORT', 3000))
+WEB_CONCURRENCY = int(os.getenv("WEB_CONCURRENCY", 1))
 
-WEB_CONCURRENCY = int(os.getenv('WEB_CONCURRENCY', 1))
+SUPABASE_DB_PASSWORD = os.getenv("SUPABASE_DB_PASSWORD")
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL").replace("[YOUR-PASSWORD]", quote_plus(SUPABASE_DB_PASSWORD))
 
-SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
-SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL').replace('[YOUR-PASSWORD]', quote_plus(SUPABASE_DB_PASSWORD))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+REDIS_URL = os.getenv("REDIS_URL").replace("[YOUR-PASSWORD]", quote_plus(REDIS_PASSWORD))
 
-REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
-REDIS_URL = os.getenv('REDIS_URL').replace('[YOUR-PASSWORD]', quote_plus(REDIS_PASSWORD))
-
-GITHUB_STEP_SUMMARY = os.getenv('GITHUB_STEP_SUMMARY')
+GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
 
 
 def _load_yaml_config(path: Path, name: str) -> dict:
@@ -36,13 +37,33 @@ def _load_yaml_config(path: Path, name: str) -> dict:
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f'{name} config file not found!',
+            detail=f"{name} config file not found!",
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f'Error reading {name} config file: {e}',
+            detail=f"Error reading {name} config file: {e}",
         )
+
+
+def _load_toml_config(path: Path, name: str) -> dict:
+    try:
+        with path.open("rb") as f:
+            return tomllib.load(f)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{name} config file not found!",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error reading {name} config file: {e}",
+        )
+
+
+_pyproject = _load_toml_config(PYPROJECT_TOML_PATH, "Project metadata")
+PROJECT_NAME = _pyproject["project"]["name"]
 
 
 _api_managed_params = _load_yaml_config(API_MANAGED_PARAMS_CONFIG_PATH, "API managed params")

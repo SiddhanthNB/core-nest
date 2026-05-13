@@ -1,4 +1,5 @@
 import hashlib
+
 from fastapi import HTTPException, Request, status
 
 from app.config.logger import logger

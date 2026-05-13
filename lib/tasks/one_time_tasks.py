@@ -1,7 +1,10 @@
 import asyncio
-from invoke.tasks import task
+
 from invoke.collection import Collection
+from invoke.tasks import task
+
 from lib.utils.create_client import create_client as _create_client_helper
+
 
 @task()
 def create_client(ctx, name: str):
@@ -11,5 +14,6 @@ def create_client(ctx, name: str):
     """
     asyncio.run(_create_client_helper(name))
 
-one_time_tasks_ns = Collection('one-time-tasks')
-one_time_tasks_ns.add_task(create_client, 'create-client')
+
+one_time_tasks_ns = Collection("one-time-tasks")
+one_time_tasks_ns.add_task(create_client, "create-client")

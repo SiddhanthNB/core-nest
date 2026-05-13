@@ -1,17 +1,16 @@
-from logging.config import fileConfig
 import os
 import sys
+from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
 from duo_orm.migrations.config import get_version_table
 
 # Add project root to path
-project_root = os.path.join(os.path.dirname(__file__), '../../../..')
+project_root = os.path.join(os.path.dirname(__file__), "../../../..")
 sys.path.insert(0, project_root)
 
-import app.db.models
-from app.db import db
+from app.db import db  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -53,6 +52,7 @@ def include_name(name, type_, parent_names):
         return name.startswith(TABLE_PREFIX)
     return True
 
+
 def include_object(object, name, type_, reflected, compare_to):
     """Only include objects that belong to this project"""
     if type_ == "table":
@@ -82,7 +82,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         version_table=VERSION_TABLE,
         include_name=include_name,
-        include_object=include_object
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -102,7 +102,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             version_table=VERSION_TABLE,
             include_name=include_name,
-            include_object=include_object
+            include_object=include_object,
         )
 
         with context.begin_transaction():

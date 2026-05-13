@@ -17,7 +17,7 @@ class Embeddings(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _validate_api_managed_fields(cls, data: Any) -> Any:
-        if isinstance(data, dict) and any(field in data for field in constants.API_MANAGED_PARAMS["embeddings"]["blocked_params"]):
+        if isinstance(data, dict) and any(field in data for field in constants.API_MANAGED_PARAMS["embeddings"]["blocked_params"]):  # fmt: skip
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Unsupported request fields for /embeddings: model",

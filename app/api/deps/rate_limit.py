@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
 from redis.exceptions import RedisError
@@ -16,10 +16,11 @@ async def _increment_with_expiry(key: str, ttl: int) -> int:
     return int(count)
 
 
-async def _decrement_concurrent_counter(key: str) -> None: await redis_client.decr(key)
+async def _decrement_concurrent_counter(key: str) -> None:
+    await redis_client.decr(key)
 
 
-async def rate_limiter(request: Request, background_tasks: BackgroundTasks, current_client: ClientSchema.Read = Depends(auth)) -> None:
+async def rate_limiter(request: Request, background_tasks: BackgroundTasks, current_client: ClientSchema.Read = Depends(auth)) -> None:  # fmt: skip
     """
     Apply rate limiting based on the resolved client schema.
     """
@@ -30,7 +31,7 @@ async def rate_limiter(request: Request, background_tasks: BackgroundTasks, curr
 
     config = current_client.rate_limit_config
     client_id = str(current_client.id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         if config.requests_per_minute is not None:

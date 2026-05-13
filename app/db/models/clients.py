@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from duo_orm import Boolean, DateTime, PG_UUID, String, mapped_column, relationship
+from duo_orm import PG_UUID, Boolean, DateTime, String, mapped_column, relationship
 
 from app.db import db
 
 
+# fmt: off
 class Client(db.Model):
     __tablename__ = "corenest__clients"
 
@@ -25,3 +26,4 @@ class Client(db.Model):
     @classmethod
     def __declare_last__(cls) -> None:
         pass
+# fmt: on

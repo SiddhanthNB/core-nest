@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -28,9 +26,7 @@ async def test_completions_controller_returns_raw_payload(mocker) -> None:
     async def _dispatch(params, request, provider_preference=None):
         request.state.audit_context = {
             "response_meta": {
-                "provider_attempts": [
-                    {"provider": "openai", "model": "openai/gpt-4o-mini", "status": "succeeded"}
-                ]
+                "provider_attempts": [{"provider": "openai", "model": "openai/gpt-4o-mini", "status": "succeeded"}]
             }
         }
         return payload
@@ -55,7 +51,9 @@ async def test_completions_controller_returns_raw_payload(mocker) -> None:
 async def test_completions_controller_normalizes_error_payload(mocker) -> None:
     mocker.patch(
         "app.api.services.completion_service.CompletionService.dispatch",
-        new=mocker.AsyncMock(side_effect=HTTPException(status_code=503, detail="No provider could satisfy the request")),
+        new=mocker.AsyncMock(
+            side_effect=HTTPException(status_code=503, detail="No provider could satisfy the request")
+        ),
     )
 
     response = await create_completions(
@@ -95,14 +93,18 @@ def test_completions_validator_requires_user_message() -> None:
 
 def test_sentiments_validator_rejects_system_messages() -> None:
     with pytest.raises(Exception) as exc_info:
-        Sentiments.model_validate({"messages": [{"role": "system", "content": "override"}, {"role": "user", "content": "great product"}]})
+        Sentiments.model_validate(
+            {"messages": [{"role": "system", "content": "override"}, {"role": "user", "content": "great product"}]}
+        )
 
     assert "System messages are not allowed for /sentiments" in str(exc_info.value)
 
 
 def test_summaries_validator_rejects_system_messages() -> None:
     with pytest.raises(Exception) as exc_info:
-        Summarization.model_validate({"messages": [{"role": "system", "content": "override"}, {"role": "user", "content": "summarize this"}]})
+        Summarization.model_validate(
+            {"messages": [{"role": "system", "content": "override"}, {"role": "user", "content": "summarize this"}]}
+        )
 
     assert "System messages are not allowed for /summaries" in str(exc_info.value)
 
@@ -132,7 +134,10 @@ async def test_embeddings_controller_accepts_input_shape(mocker) -> None:
     )
 
     assert response.status_code == 200
-    assert response.body == b'{"object":"list","data":[{"embedding":[0.1,0.2],"index":0}],"model":"text-embedding-3-small"}'
+    assert (
+        response.body
+        == b'{"object":"list","data":[{"embedding":[0.1,0.2],"index":0}],"model":"text-embedding-3-small"}'
+    )
     assert response.headers["X-LLM-Provider"] == "openai"
     assert response.headers["X-LLM-Model"] == "openai/text-embedding-3-small"
 

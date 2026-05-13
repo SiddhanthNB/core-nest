@@ -109,7 +109,7 @@ def _extract_response_content(payload: Mapping[str, Any]) -> str | None:
     return content if isinstance(content, str) else None
 
 
-def _validate_json_response_payload(payload: Mapping[str, Any], *, provider: str, model: str, response_format: Any) -> None:
+def _validate_json_response_payload(payload: Mapping[str, Any], *, provider: str, model: str, response_format: Any) -> None:  # fmt: skip
     content = _extract_response_content(payload)
     if not content or not content.strip():
         raise JSONSchemaValidationError(

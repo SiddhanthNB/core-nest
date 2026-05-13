@@ -256,9 +256,7 @@ def test_base_service_response_meta_normalizes_litellm_usage() -> None:
     )
 
     assert response_meta == {
-        "provider_attempts": [
-            {"provider": "mistral", "model": "mistral/ministral-8b-2410", "status": "succeeded"}
-        ],
+        "provider_attempts": [{"provider": "mistral", "model": "mistral/ministral-8b-2410", "status": "succeeded"}],
         "attempt_count": 1,
         "finish_reason": "stop",
         "usage": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
@@ -282,11 +280,7 @@ async def test_completion_service_falls_back_on_invalid_json_when_json_requested
                     "is_circuit_open": staticmethod(mocker.AsyncMock(return_value=False)),
                     "acompletion": staticmethod(
                         mocker.AsyncMock(
-                            return_value={
-                                "choices": [
-                                    {"message": {"content": "not json"}, "finish_reason": "stop"}
-                                ]
-                            }
+                            return_value={"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
                         )
                     ),
                 },
@@ -301,9 +295,7 @@ async def test_completion_service_falls_back_on_invalid_json_when_json_requested
                     "acompletion": staticmethod(
                         mocker.AsyncMock(
                             return_value={
-                                "choices": [
-                                    {"message": {"content": "{\"ok\": true}"}, "finish_reason": "stop"}
-                                ]
+                                "choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}]
                             }
                         )
                     ),
@@ -320,7 +312,7 @@ async def test_completion_service_falls_back_on_invalid_json_when_json_requested
         request=request,
     )
 
-    assert result["choices"][0]["message"]["content"] == "{\"ok\": true}"
+    assert result["choices"][0]["message"]["content"] == '{"ok": true}'
     assert request.state.audit_context["response_meta"] == {
         "provider_attempts": [
             {
@@ -357,11 +349,7 @@ async def test_sentiment_service_rejects_invalid_json_from_forced_provider(mocke
                 "is_circuit_open": staticmethod(mocker.AsyncMock(return_value=False)),
                 "acompletion": staticmethod(
                     mocker.AsyncMock(
-                        return_value={
-                            "choices": [
-                                {"message": {"content": "not json"}, "finish_reason": "stop"}
-                            ]
-                        }
+                        return_value={"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
                     )
                 ),
             },
@@ -421,7 +409,9 @@ async def test_completion_service_surfaces_litellm_param_errors(mocker) -> None:
     )
 
     with pytest.raises(Exception) as exc_info:
-        await service.dispatch(Completions(messages=[{"role": "user", "content": "hello"}]), provider_preference="mistral")
+        await service.dispatch(
+            Completions(messages=[{"role": "user", "content": "hello"}]), provider_preference="mistral"
+        )
 
     assert getattr(exc_info.value, "status_code", None) == 400
     assert "Supported params" in str(getattr(exc_info.value, "detail", exc_info.value))
@@ -470,17 +460,36 @@ async def test_completion_service_forced_provider_circuit_open_records_skipped_a
 @pytest.mark.asyncio
 async def test_completion_service_round_robin_rotates_start_provider_with_fakeredis(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    mocker.patch("app.api.services._helpers.constants.COMPLETION_PROVIDERS", ("groq", "google", "openrouter", "mistral"))
+    mocker.patch(
+        "app.api.services._helpers.constants.COMPLETION_PROVIDERS", ("groq", "google", "openrouter", "mistral")
+    )
 
-    assert await _ordered_completion_providers(None, redis_client=fake_redis) == ["groq", "google", "openrouter", "mistral"]
-    assert await _ordered_completion_providers(None, redis_client=fake_redis) == ["google", "openrouter", "mistral", "groq"]
-    assert await _ordered_completion_providers(None, redis_client=fake_redis) == ["openrouter", "mistral", "groq", "google"]
+    assert await _ordered_completion_providers(None, redis_client=fake_redis) == [
+        "groq",
+        "google",
+        "openrouter",
+        "mistral",
+    ]
+    assert await _ordered_completion_providers(None, redis_client=fake_redis) == [
+        "google",
+        "openrouter",
+        "mistral",
+        "groq",
+    ]
+    assert await _ordered_completion_providers(None, redis_client=fake_redis) == [
+        "openrouter",
+        "mistral",
+        "groq",
+        "google",
+    ]
 
 
 @pytest.mark.asyncio
 async def test_completion_service_forced_provider_bypasses_round_robin_counter(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    mocker.patch("app.api.services._helpers.constants.COMPLETION_PROVIDERS", ("groq", "google", "openrouter", "mistral"))
+    mocker.patch(
+        "app.api.services._helpers.constants.COMPLETION_PROVIDERS", ("groq", "google", "openrouter", "mistral")
+    )
 
     assert await _ordered_completion_providers("google", redis_client=fake_redis) == ["google"]
     assert await fake_redis.get("llm:routing:completion:rr_counter") is None
@@ -488,7 +497,9 @@ async def test_completion_service_forced_provider_bypasses_round_robin_counter(m
 
 @pytest.mark.asyncio
 async def test_completion_service_round_robin_falls_back_to_static_order_when_redis_fails(mocker) -> None:
-    mocker.patch("app.api.services._helpers.constants.COMPLETION_PROVIDERS", ("groq", "google", "openrouter", "mistral"))
+    mocker.patch(
+        "app.api.services._helpers.constants.COMPLETION_PROVIDERS", ("groq", "google", "openrouter", "mistral")
+    )
 
     assert await _ordered_completion_providers(
         None,

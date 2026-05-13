@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from duo_orm import DateTime, Float, ForeignKey, PG_JSONB, PG_UUID, String, mapped_column, relationship
+from duo_orm import PG_JSONB, PG_UUID, DateTime, Float, ForeignKey, String, mapped_column, relationship
 
 from app.db import db
 
 
+# fmt: off
 class AuditLog(db.Model):
     __tablename__ = "corenest__audit_logs"
 
@@ -31,3 +32,4 @@ class AuditLog(db.Model):
     @classmethod
     def __declare_last__(cls) -> None:
         pass
+# fmt: on

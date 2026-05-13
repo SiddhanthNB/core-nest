@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from duo_orm import DateTime, ForeignKey, PG_UUID, mapped_column, relationship
+from duo_orm import PG_UUID, DateTime, ForeignKey, mapped_column, relationship
 
 from app.db import db
 
 
+# fmt: off
 class RateLimitConfig(db.Model):
     __tablename__ = "corenest__rate_limit_configs"
 
@@ -26,3 +27,4 @@ class RateLimitConfig(db.Model):
     @classmethod
     def __declare_last__(cls) -> None:
         pass
+# fmt: on

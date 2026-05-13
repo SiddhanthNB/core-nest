@@ -45,8 +45,7 @@ def _configure_logger():
         level="INFO" if constants.APP_ENV.lower() == "production" else "DEBUG",
         serialize=constants.APP_ENV.lower() == "production",
         format=(
-            "{time:YYYY-MM-DDTHH:mm:ss.SSSZ} | {level} | "
-            "{extra[event]} | request_id={extra[request_id]} | {message}"
+            "{time:YYYY-MM-DDTHH:mm:ss.SSSZ} | {level} | {extra[event]} | request_id={extra[request_id]} | {message}"
         ),
     )
     return _loguru_logger.bind(event="-", request_id="-")
