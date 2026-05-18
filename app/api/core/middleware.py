@@ -27,25 +27,16 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             request_body=request_body,
         )
-        request_logger = logger.bind(
-            event="request_started",
-            request_id=request_id,
-            path=request.url.path,
-            method=request.method,
+        logger.info(
+            f"[request_id: {request_id[:8]}] [method: {request.method}] [path: {request.url.path}] Request started"
         )
-        request_logger.info("Request started")
 
         try:
             response = await call_next(request)
         except Exception as exc:
-            logger.bind(
-                event="unexpected_error",
-                request_id=request_id,
-                path=request.url.path,
-                method=request.method,
-                error_type=type(exc).__name__,
-            ).error(
-                f"Unhandled request failure for {request.url.path}",
+            logger.error(
+                f"[request_id: {request_id[:8]}] [method: {request.method}] [path: {request.url.path}] "
+                f"[error_type: {type(exc).__name__}] Unhandled request failure",
                 exc_info=True,
             )
             response = JSONResponse(
@@ -54,15 +45,11 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             )
 
         process_time_ms = round((time.perf_counter() - start) * 1000, 2)
-        log_event = "request_failed" if response.status_code >= 500 else "request_completed"
-        logger.bind(
-            event=log_event,
-            request_id=request_id,
-            path=request.url.path,
-            method=request.method,
-            status_code=response.status_code,
-            latency_ms=process_time_ms,
-        ).info(f"Request finished with status {response.status_code}")
+        logger.info(
+            f"[request_id: {request_id[:8]}] [method: {request.method}] "
+            f"[path: {request.url.path}] [status_code: {response.status_code}] "
+            f"[latency_ms: {process_time_ms}] Request finished"
+        )
 
         existing_background = response.background
         response.background = BackgroundTask(
@@ -125,22 +112,27 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             }
 
             client = getattr(request.state, "client", None)
-            await AuditLog.acreate(
-                request_id=uuid.UUID(str(audit_context["request_id"])),
-                path=request.url.path,
-                method=request.method,
-                client_id=getattr(client, "id", None),
-                provider=(final_attempt or last_failed_attempt or {}).get("provider"),
-                model=(final_attempt or last_failed_attempt or {}).get("model"),
-                success=status_code < 400,
-                status_code=status_code,
-                process_time_ms=process_time_ms,
-                error=(last_failed_attempt or {}).get("error") or (f"HTTP {status_code}" if status_code >= 400 else None),  # fmt: skip
-                request_meta=audit_payload["request_meta"],
-                response_meta=audit_payload["response_meta"],
-            )
+            error_msg = (last_failed_attempt or {}).get("error") or (f"HTTP {status_code}" if status_code >= 400 else None),  # fmt: skip
+            payload = {
+                "request_id": uuid.UUID(str(audit_context["request_id"])),
+                "path": request.url.path,
+                "method": request.method,
+                "client_id": getattr(client, "id", None),
+                "provider": (final_attempt or last_failed_attempt or {}).get("provider"),
+                "model": (final_attempt or last_failed_attempt or {}).get("model"),
+                "success": status_code < 400,
+                "status_code": status_code,
+                "process_time_ms": process_time_ms,
+                "error": error_msg,
+                "request_meta": audit_payload["request_meta"],
+                "response_meta": audit_payload["response_meta"],
+            }
+            await AuditLog.acreate(**payload)
         except Exception as e:
-            logger.bind(event="audit_log_failed").error(f"Error saving API log to database: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error saving API log to database: {str(e)}",
+                exc_info=True,
+            )
 
     async def _request_json(self, request: Request) -> dict[str, Any]:
         try:

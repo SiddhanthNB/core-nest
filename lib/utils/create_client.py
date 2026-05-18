@@ -23,10 +23,11 @@ async def create_client(name: str):
             print("Please choose a different name OR deactivate the existing client before creating a new one.")
             return
 
-        new_client = await Client.acreate(
-            name=name,
-            hashed_api_key=hashed_key,
-        )
+        payload = {
+            "name": name,
+            "hashed_api_key": hashed_key,
+        }
+        new_client = await Client.acreate(**payload)
 
         print("\n" + "=" * 50)
         print("Client created successfully!")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -11,6 +12,7 @@ from litellm import (
     InternalServerError,
     RateLimitError,
     ServiceUnavailableError,
+    Timeout,
 )
 from redis.asyncio import Redis
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
@@ -21,7 +23,9 @@ from app.config.logger import logger
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_COOLDOWN_SECONDS = 60
 _CIRCUIT_FAILURE_TTL_SECONDS = 600
-_DEFAULT_RETRY_WAIT = wait_exponential_jitter(initial=0.2, max=0.8, jitter=0.02)
+_DEFAULT_RETRY_WAIT = wait_exponential_jitter(initial=1, max=2, jitter=0.025)
+_DEFAULT_TIMEOUT_SECONDS = 5
+_FORCED_PROVIDER_TIMEOUT_SECONDS = 10
 
 
 _RETRYABLE_PROVIDER_EXCEPTIONS = (
@@ -31,6 +35,7 @@ _RETRYABLE_PROVIDER_EXCEPTIONS = (
     InternalServerError,
     RateLimitError,
     ServiceUnavailableError,
+    Timeout,
 )
 
 
@@ -49,6 +54,12 @@ class BaseAdapter:
         self._embedding_model: str | None = self._models.get("embedding", None)
         self._completion_router = None
         self._embedding_router = None
+        self._attempt_number = 0
+
+    def _provider_preference(self) -> str | None:
+        audit_context = getattr(getattr(self.request, "state", None), "audit_context", {})
+        request_meta = audit_context.get("request_meta", {})
+        return request_meta.get("provider_pref") or None
 
     def _supports_completion(self) -> bool:
         return self._completion_router is not None and self._completion_model is not None
@@ -65,43 +76,63 @@ class BaseAdapter:
         return await self._execute(
             lambda: self._completion_router.acompletion(
                 model=self._completion_model, messages=messages, **request_params
-            )
+            ),
+            model=self._completion_model,
         )
 
     async def aembedding(self, *, input_data: str | list[str], request_params: Mapping[str, Any]) -> Any:
         if not self._supports_embedding():
             raise RuntimeError(f"Provider '{self._provider_name}' does not support embedding")
         return await self._execute(
-            lambda: self._embedding_router.aembedding(model=self._embedding_model, input=input_data, **request_params)
+            lambda: self._embedding_router.aembedding(model=self._embedding_model, input=input_data, **request_params),
+            model=self._embedding_model,
         )
 
-    async def _execute(self, operation: Any) -> Any:
+    async def _execute(self, operation: Any, *, model: str | None) -> Any:
         try:
-            result = await self._call_with_retry(operation)
+            result = await self._call_with_retry(operation, model=model)
         except Exception as exc:
-            if isinstance(exc, _RETRYABLE_PROVIDER_EXCEPTIONS):
-                self._logger(
-                    event="retry_exhausted", provider=self._provider_name, error_type=type(exc).__name__
-                ).warning("Retry policy exhausted for provider")
-            opened = await self._record_failure()
-            self._logger(
-                event="provider_attempt_failed", provider=self._provider_name, error_type=type(exc).__name__
-            ).warning("Provider attempt failed")
-            if opened:
-                self._logger(event="circuit_opened", provider=self._provider_name).warning(
-                    "Provider circuit opened after repeated failures"
+            state = getattr(self.request, "state", None)
+            request_id = getattr(state, "request_id", None)
+            request_prefix = f"[request_id: {str(request_id)[:8]}] " if request_id else ""
+            provider_preference = self._provider_preference()
+            if isinstance(exc, _RETRYABLE_PROVIDER_EXCEPTIONS) and self._attempt_number:
+                provider_phrase = (
+                    f"requested provider '{self._provider_name}'"
+                    if provider_preference is not None
+                    else f"provider '{self._provider_name}'"
                 )
+                logger.warning(
+                    f"{request_prefix}[attempt: {self._attempt_number}] {provider_phrase} attempts exhausted "
+                    f"after {type(exc).__name__}"
+                )
+            opened = await self._record_failure()
+            if opened:
+                provider_phrase = (
+                    f"requested provider '{self._provider_name}'"
+                    if provider_preference is not None
+                    else f"provider '{self._provider_name}'"
+                )
+                logger.warning(f"{request_prefix}{provider_phrase} circuit opened after repeated failures")
             raise
         had_state = await self._reset_circuit()
         if had_state:
-            self._logger(event="circuit_reset", provider=self._provider_name).info(
-                "Provider circuit state reset after success"
+            state = getattr(self.request, "state", None)
+            request_id = getattr(state, "request_id", None)
+            request_prefix = f"[request_id: {str(request_id)[:8]}] " if request_id else ""
+            provider_preference = self._provider_preference()
+            provider_phrase = (
+                f"requested provider '{self._provider_name}'"
+                if provider_preference is not None
+                else f"provider '{self._provider_name}'"
             )
+            logger.info(f"{request_prefix}{provider_phrase} circuit reset after success")
         return result
 
-    async def _call_with_retry(self, operation: Any) -> Any:
+    async def _call_with_retry(self, operation: Any, *, model: str | None) -> Any:
         retry_config = {
             "stop": stop_after_attempt(3),
+            "before": self._before_attempt(),
             "wait": self._wait_for_retry,
             "retry": retry_if_exception_type(_RETRYABLE_PROVIDER_EXCEPTIONS),
             "reraise": True,
@@ -109,7 +140,14 @@ class BaseAdapter:
         }
         async for attempt in AsyncRetrying(**retry_config):
             with attempt:
-                return await operation()
+                try:
+                    return await asyncio.wait_for(operation(), timeout=self._attempt_timeout_seconds())
+                except TimeoutError as exc:
+                    raise Timeout(
+                        message=f"Provider '{self._provider_name}' timed out after {self._attempt_timeout_seconds()} seconds",
+                        model=model or self._provider_name,
+                        llm_provider=self._provider_name,
+                    ) from exc
 
     def _api_key(self) -> str:
         api_key_env = self._provider_config.get("api_key_env", None)
@@ -154,23 +192,45 @@ class BaseAdapter:
                     pass
         return _DEFAULT_RETRY_WAIT(retry_state)
 
+    def _attempt_timeout_seconds(self) -> int:
+        if self._provider_preference() is not None:
+            return _FORCED_PROVIDER_TIMEOUT_SECONDS
+        return _DEFAULT_TIMEOUT_SECONDS
+
     def _before_retry_sleep(self):
         def _log(retry_state: Any) -> None:
             exc = retry_state.outcome.exception() if retry_state.outcome else None
-            self._logger(
-                event="retry_scheduled",
-                provider=self._provider_name,
-                attempt=retry_state.attempt_number,
-                error_type=type(exc).__name__ if exc else None,
-            ).warning("Retry scheduled for provider attempt")
+            state = getattr(self.request, "state", None)
+            request_id = getattr(state, "request_id", None)
+            request_prefix = f"[request_id: {str(request_id)[:8]}] " if request_id else ""
+            provider_preference = self._provider_preference()
+            provider_phrase = (
+                f"requested provider '{self._provider_name}'"
+                if provider_preference is not None
+                else f"provider '{self._provider_name}'"
+            )
+            logger.warning(
+                f"{request_prefix}[attempt: {retry_state.attempt_number}] {provider_phrase} "
+                f"attempt failed with {type(exc).__name__ if exc else 'UnknownError'}"
+            )
 
         return _log
 
-    def _logger(self, **extra: Any):
-        bound: dict[str, Any] = {}
-        state = getattr(self.request, "state", None)
-        request_id = getattr(state, "request_id", None)
-        if request_id:
-            bound["request_id"] = request_id
-        bound.update({key: value for key, value in extra.items() if value is not None})
-        return logger.bind(**bound)
+    def _before_attempt(self):
+        def _log(retry_state: Any) -> None:
+            self._attempt_number = retry_state.attempt_number
+            state = getattr(self.request, "state", None)
+            request_id = getattr(state, "request_id", None)
+            request_prefix = f"[request_id: {str(request_id)[:8]}] " if request_id else ""
+            provider_preference = self._provider_preference()
+            provider_phrase = (
+                f"requested provider '{self._provider_name}'"
+                if provider_preference is not None
+                else f"provider '{self._provider_name}'"
+            )
+            logger.debug(
+                f"{request_prefix}[attempt: {retry_state.attempt_number}] "
+                f"Starting provider attempt with {provider_phrase}"
+            )
+
+        return _log

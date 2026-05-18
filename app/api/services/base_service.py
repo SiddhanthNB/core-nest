@@ -13,6 +13,7 @@ from litellm import (
 )
 
 from app.config import constants
+from app.config.logger import logger
 from app.config.redis import redis_client
 from lib.llm.adapters import get_adapter
 
@@ -29,6 +30,20 @@ from ._helpers import (
 _SUPPORTED_COMPLETION_PROVIDERS = set(constants.COMPLETION_PROVIDERS)
 _SUPPORTED_EMBEDDING_PROVIDERS = set(constants.EMBEDDING_PROVIDERS)
 _LITELLM_REQUEST_ERRORS = (BadRequestError, InvalidRequestError, UnsupportedParamsError, UnprocessableEntityError)
+
+
+def _request_prefix(request: Any = None) -> str:
+    state = getattr(request, "state", None)
+    request_id = getattr(state, "request_id", None)
+    return f"[request_id: {str(request_id)[:8]}] " if request_id else ""
+
+
+def _provider_preference_value(request: Any = None, provider_preference: str | None = None) -> str:
+    if provider_preference:
+        return provider_preference
+    audit_context = getattr(getattr(request, "state", None), "audit_context", {})
+    request_meta = audit_context.get("request_meta", {})
+    return request_meta.get("provider_pref") or "-"
 
 
 class BaseService:
@@ -51,8 +66,14 @@ class BaseService:
         providers = await _ordered_completion_providers(provider_preference, redis_client=redis_client, request=request)
         provider_attempts = _provider_attempts(request)
         last_error: Exception | None = None
+        request_prefix = _request_prefix(request)
+        provider_preference_value = _provider_preference_value(request, provider_preference)
+        if provider_preference:
+            logger.debug(f"{request_prefix}Requested provider candidate '{provider_preference_value}' resolved")
+        else:
+            logger.debug(f"{request_prefix}Resolved provider candidates: {' -> '.join(providers)}")
 
-        for provider_name in providers:
+        for index, provider_name in enumerate(providers):
             adapter = get_adapter(provider_name, redis=redis_client, request=request)
             resolved_provider = adapter._provider_name
             model = adapter._completion_model
@@ -61,6 +82,12 @@ class BaseService:
                 provider_attempts.append(
                     {"provider": resolved_provider, "model": model, "status": "skipped", "reason": "circuit_open"}
                 )
+                if provider_preference:
+                    logger.warning(
+                        f"{request_prefix}Skipping requested provider '{resolved_provider}' because circuit is open"
+                    )
+                else:
+                    logger.warning(f"{request_prefix}Skipping provider '{resolved_provider}' because circuit is open")
                 if provider_preference:
                     _set_response_meta(request, _response_meta(provider_attempts, payload={}))
                     raise HTTPException(
@@ -77,6 +104,12 @@ class BaseService:
                 )
                 last_error = exc
                 if provider_preference:
+                    logger.warning(
+                        f"{request_prefix}Requested provider '{resolved_provider}' failed with {type(exc).__name__}"
+                    )
+                else:
+                    logger.warning(f"{request_prefix}Provider '{resolved_provider}' failed with {type(exc).__name__}")
+                if provider_preference:
                     _set_response_meta(request, _response_meta(provider_attempts, payload={}))
                     if isinstance(exc, HTTPException):
                         raise
@@ -91,6 +124,12 @@ class BaseService:
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                         detail=f"Provider '{resolved_provider}' failed",
                     ) from exc
+                next_provider = providers[index + 1] if index + 1 < len(providers) else None
+                if next_provider:
+                    logger.debug(
+                        f"{request_prefix}Falling back from provider '{resolved_provider}' to provider '{next_provider}' "
+                        f"after {type(exc).__name__}"
+                    )
                 continue
 
             try:
@@ -107,14 +146,28 @@ class BaseService:
                 )
                 last_error = exc
                 if provider_preference:
+                    logger.warning(f"{request_prefix}Requested provider '{resolved_provider}' returned invalid JSON")
+                else:
+                    logger.warning(f"{request_prefix}Provider '{resolved_provider}' returned invalid JSON")
+                if provider_preference:
                     _set_response_meta(request, _response_meta(provider_attempts, payload={}))
                     raise HTTPException(
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                         detail=f"Provider '{resolved_provider}' returned invalid JSON",
                     ) from exc
+                next_provider = providers[index + 1] if index + 1 < len(providers) else None
+                if next_provider:
+                    logger.debug(
+                        f"{request_prefix}Falling back from provider '{resolved_provider}' to provider '{next_provider}' "
+                        f"after {type(exc).__name__}"
+                    )
                 continue
 
             provider_attempts.append({"provider": resolved_provider, "model": model, "status": "succeeded"})
+            if provider_preference:
+                logger.debug(f"{request_prefix}Requested provider '{resolved_provider}' succeeded")
+            else:
+                logger.debug(f"{request_prefix}Provider '{resolved_provider}' succeeded")
             _set_response_meta(request, _response_meta(provider_attempts, payload=payload))
             return payload
 
@@ -154,12 +207,19 @@ class BaseService:
         provider_attempts = _provider_attempts(request)
         adapter = get_adapter(provider_preference, redis=redis_client, request=request)
         resolved_provider = adapter._provider_name
-        model = adapter._embedding_model
-
+        request_prefix = _request_prefix(request)
+        provider_preference_value = _provider_preference_value(request, provider_preference)
+        logger.debug(f"{request_prefix}Requested provider candidate '{provider_preference_value}' resolved")
         if await adapter.is_circuit_open():
             provider_attempts.append(
-                {"provider": resolved_provider, "model": model, "status": "skipped", "reason": "circuit_open"}
+                {
+                    "provider": resolved_provider,
+                    "model": adapter._embedding_model,
+                    "status": "skipped",
+                    "reason": "circuit_open",
+                }
             )
+            logger.warning(f"{request_prefix}Skipping requested provider '{resolved_provider}' because circuit is open")
             _set_response_meta(request, _response_meta(provider_attempts, payload={}))
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -170,8 +230,14 @@ class BaseService:
             payload = await adapter.aembedding(input_data=input_data, request_params=request_params)
         except Exception as exc:
             provider_attempts.append(
-                {"provider": resolved_provider, "model": model, "status": "failed", "error": type(exc).__name__}
+                {
+                    "provider": resolved_provider,
+                    "model": adapter._embedding_model,
+                    "status": "failed",
+                    "error": type(exc).__name__,
+                }
             )
+            logger.warning(f"{request_prefix}Requested provider '{resolved_provider}' failed with {type(exc).__name__}")
             _set_response_meta(request, _response_meta(provider_attempts, payload={}))
             if isinstance(exc, HTTPException):
                 raise
@@ -179,7 +245,7 @@ class BaseService:
                 raise _litellm_request_error(
                     exc,
                     provider=resolved_provider,
-                    model=model,
+                    model=adapter._embedding_model,
                     request_type="embeddings",
                 ) from exc
             raise HTTPException(
@@ -187,6 +253,9 @@ class BaseService:
                 detail=f"Provider '{resolved_provider}' failed",
             ) from exc
 
-        provider_attempts.append({"provider": resolved_provider, "model": model, "status": "succeeded"})
+        provider_attempts.append(
+            {"provider": resolved_provider, "model": adapter._embedding_model, "status": "succeeded"}
+        )
+        logger.debug(f"{request_prefix}Requested provider '{resolved_provider}' succeeded")
         _set_response_meta(request, _response_meta(provider_attempts, payload=payload))
         return payload

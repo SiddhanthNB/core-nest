@@ -1,16 +1,37 @@
 providers:
-  mistral:
-    api_key_env: MISTRAL_API_KEY
-    provider: mistral
+  groq:
+    api_key_env: GROQ_API_KEY
+    provider: groq
     models:
-      completion: mistral/ministral-8b-2410
-      embedding: mistral/mistral-embed
+      completion: groq/llama-3.1-8b-instant
+  cerebras:
+    api_key_env: CEREBRAS_API_KEY
+    provider: cerebras
+    models:
+      completion: cerebras/llama3.1-8b
   google:
     api_key_env: GOOGLE_API_KEY
     provider: google
     models:
       completion: gemini/gemini-2.5-flash-lite
       embedding: gemini/gemini-embedding-001
+  mistral:
+    api_key_env: MISTRAL_API_KEY
+    provider: mistral
+    models:
+      completion: mistral/ministral-8b-2410
+      embedding: mistral/mistral-embed
+  huggingface:
+    api_key_env: HUGGINGFACE_API_KEY
+    provider: huggingface
+    models:
+      completion: huggingface/google/gemma-4-31B-it
+  openrouter:
+    api_key_env: OPENROUTER_API_KEY
+    provider: openrouter
+    models:
+      completion: openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+      embedding: openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free
   openai:
     enabled: false
     api_key_env: OPENAI_API_KEY
@@ -18,24 +39,3 @@ providers:
     models:
       completion: openai/gpt-4o-mini
       embedding: openai/text-embedding-3-small
-  groq:
-    api_key_env: GROQ_API_KEY
-    provider: groq
-    models:
-      completion: groq/llama-3.1-8b-instant
-  openrouter:
-    api_key_env: OPENROUTER_API_KEY
-    provider: openrouter
-    models:
-      completion: openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
-      embedding: openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free
-  cerebras:
-    api_key_env: CEREBRAS_API_KEY
-    provider: cerebras
-    models:
-      completion: cerebras/llama3.1-8b
-  huggingface:
-    api_key_env: HUGGINGFACE_API_KEY
-    provider: huggingface
-    models:
-      completion: huggingface/google/gemma-4-31B-it

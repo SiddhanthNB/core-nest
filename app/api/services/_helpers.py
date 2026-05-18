@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -12,7 +13,8 @@ from redis.exceptions import RedisError
 from app.config import constants
 from app.config.logger import logger
 
-_COMPLETION_ROUND_ROBIN_KEY = "llm:routing:completion:rr_counter"
+_COMPLETION_ROUND_ROBIN_KEY_PREFIX = "llm:routing:completion:rr_counter"
+_COMPLETION_ROUND_ROBIN_TTL_SECONDS = 36 * 60 * 60
 
 
 def _provider_attempts(request: Any) -> list[dict[str, Any]]:
@@ -61,12 +63,7 @@ def _litellm_request_error(exc: Exception, *, provider: str, model: str, request
     return HTTPException(status_code=status_code, detail=str(exc))
 
 
-async def _ordered_completion_providers(
-    provider_preference: str | None,
-    *,
-    redis_client: Any,
-    request: Any = None,
-) -> list[str]:
+async def _ordered_completion_providers(provider_preference: str | None, *, redis_client: Any, request: Any = None) -> list[str]: # fmt: skip
     if provider_preference:
         return [provider_preference]
 
@@ -74,19 +71,32 @@ async def _ordered_completion_providers(
     if len(providers) <= 1:
         return providers
 
+    round_robin_key = _completion_round_robin_key()
     try:
-        counter = int(await redis_client.incr(_COMPLETION_ROUND_ROBIN_KEY))
+        counter = int(await redis_client.incr(round_robin_key))
+        if counter == 1:
+            await redis_client.expire(round_robin_key, _COMPLETION_ROUND_ROBIN_TTL_SECONDS)
     except (RedisError, AttributeError, TypeError, ValueError) as exc:
         request_id = getattr(getattr(request, "state", None), "request_id", "-")
-        logger.bind(
-            event="provider_ordering_degraded",
-            request_id=request_id,
-            error_type=type(exc).__name__,
-        ).warning("Falling back to static provider ordering")
+        logger.warning(
+            f"[request_id: {request_id[:8] if request_id != '-' else '-'}] "
+            f"Failed to read round-robin ordering from Redis with {type(exc).__name__}. "
+            "Falling back to static provider ordering."
+        )
         return providers
 
     start_index = (counter - 1) % len(providers)
+    request_id = getattr(getattr(request, "state", None), "request_id", "-")
+    logger.debug(
+        f"[request_id: {request_id[:8] if request_id != '-' else '-'}] "
+        f"Round-robin used with key {round_robin_key}"
+    )
     return providers[start_index:] + providers[:start_index]
+
+
+def _completion_round_robin_key(now: datetime | None = None) -> str:
+    current_time = now or datetime.now(UTC)
+    return f"{_COMPLETION_ROUND_ROBIN_KEY_PREFIX}:{current_time.strftime('%Y-%m-%d')}"
 
 
 def _expects_json_response(request_params: Mapping[str, Any]) -> bool:

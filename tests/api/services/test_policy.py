@@ -9,7 +9,7 @@ from litellm import UnsupportedParamsError
 from litellm.types.utils import Usage
 from redis.exceptions import RedisError
 
-from app.api.services._helpers import _ordered_completion_providers, _response_meta
+from app.api.services._helpers import _completion_round_robin_key, _ordered_completion_providers, _response_meta
 from app.api.services.completion_service import CompletionService
 from app.api.services.embeddings_service import EmbeddingsService
 from app.api.services.sentiment_service import SentimentService
@@ -482,6 +482,8 @@ async def test_completion_service_round_robin_rotates_start_provider_with_fakere
         "groq",
         "google",
     ]
+    ttl = await fake_redis.ttl(_completion_round_robin_key())
+    assert 0 < ttl <= 36 * 60 * 60
 
 
 @pytest.mark.asyncio
@@ -492,7 +494,18 @@ async def test_completion_service_forced_provider_bypasses_round_robin_counter(m
     )
 
     assert await _ordered_completion_providers("google", redis_client=fake_redis) == ["google"]
-    assert await fake_redis.get("llm:routing:completion:rr_counter") is None
+    assert await fake_redis.get(_completion_round_robin_key()) is None
+
+
+def test_completion_round_robin_key_is_date_scoped() -> None:
+    from datetime import UTC, datetime
+
+    assert _completion_round_robin_key(datetime(2026, 5, 18, 23, 59, 59, tzinfo=UTC)) == (
+        "llm:routing:completion:rr_counter:2026-05-18"
+    )
+    assert _completion_round_robin_key(datetime(2026, 5, 19, 0, 0, 1, tzinfo=UTC)) == (
+        "llm:routing:completion:rr_counter:2026-05-19"
+    )
 
 
 @pytest.mark.asyncio
@@ -512,7 +525,7 @@ async def test_completion_service_round_robin_respects_circuit_open_and_falls_fo
     service = CompletionService()
     request = _request()
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    await fake_redis.set("llm:routing:completion:rr_counter", "1")
+    await fake_redis.set(_completion_round_robin_key(), "1")
     await fake_redis.set("circuit:google:open", "open")
     mocker.patch("app.api.services.base_service.redis_client", fake_redis)
     mocker.patch("app.api.services.base_service.constants.COMPLETION_PROVIDERS", ("mistral", "google", "openrouter"))

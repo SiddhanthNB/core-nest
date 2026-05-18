@@ -1,54 +1,32 @@
 from __future__ import annotations
 
+import logging
 import sys
-from typing import Any
-
-from loguru import logger as _loguru_logger
 
 from app.config import constants
 
 
-class _LoggerAdapter:
-    def __init__(self):
-        self._logger = _configure_logger()
+def _configure_logger() -> logging.Logger:
+    log_level = logging.INFO if constants.APP_ENV.lower() == "production" else logging.DEBUG
 
-    def bind(self, **kwargs: Any):
-        return self._logger.bind(**kwargs)
-
-    def debug(self, message: str, *args: Any, **kwargs: Any) -> None:
-        self._log("debug", message, *args, **kwargs)
-
-    def info(self, message: str, *args: Any, **kwargs: Any) -> None:
-        self._log("info", message, *args, **kwargs)
-
-    def warning(self, message: str, *args: Any, **kwargs: Any) -> None:
-        self._log("warning", message, *args, **kwargs)
-
-    def error(self, message: str, *args: Any, **kwargs: Any) -> None:
-        self._log("error", message, *args, **kwargs)
-
-    def exception(self, message: str, *args: Any, **kwargs: Any) -> None:
-        self._logger.opt(exception=True).error(message, *args, **kwargs)
-
-    def _log(self, level: str, message: str, *args: Any, **kwargs: Any) -> None:
-        exc_info = kwargs.pop("exc_info", False)
-        bound_logger = self._logger
-        if exc_info:
-            bound_logger = bound_logger.opt(exception=True)
-        getattr(bound_logger, level)(message, *args, **kwargs)
-
-
-def _configure_logger():
-    _loguru_logger.remove()
-    _loguru_logger.add(
-        sys.stdout,
-        level="INFO" if constants.APP_ENV.lower() == "production" else "DEBUG",
-        serialize=constants.APP_ENV.lower() == "production",
-        format=(
-            "{time:YYYY-MM-DDTHH:mm:ss.SSSZ} | {level} | {extra[event]} | request_id={extra[request_id]} | {message}"
-        ),
+    formatter = logging.Formatter(
+        f"[%(asctime)s] [%(levelname)s] [{constants.PROJECT_NAME}] : %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
-    return _loguru_logger.bind(event="-", request_id="-")
+    handler = logging.StreamHandler(sys.__stdout__)
+    handler.setFormatter(formatter)
+
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(logging.WARNING)
+    root_logger.addHandler(handler)
+
+    configured_logger = logging.getLogger(constants.PROJECT_NAME)
+    configured_logger.handlers.clear()
+    configured_logger.setLevel(log_level)
+    configured_logger.propagate = True
+
+    return configured_logger
 
 
-logger = _LoggerAdapter()
+logger = _configure_logger()
