@@ -58,7 +58,7 @@ async def test_sentiments_service_enforces_locked_execution_policy(mocker) -> No
     dispatch = mocker.patch.object(service, "_fetch_completion", new=mocker.AsyncMock(return_value={"ok": True}))
 
     result = await service.dispatch(
-        Sentiments(messages=[{"role": "user", "content": "great product"}]),
+        Sentiments(model="core-nest/google", messages=[{"role": "user", "content": "great product"}]),
         provider_preference="google",
     )
 
@@ -92,7 +92,7 @@ async def test_summarization_service_enforces_locked_execution_policy(mocker) ->
     dispatch = mocker.patch.object(service, "_fetch_completion", new=mocker.AsyncMock(return_value={"ok": True}))
 
     result = await service.dispatch(
-        Summarization(messages=[{"role": "user", "content": "long text"}]),
+        Summarization(model="core-nest/google", messages=[{"role": "user", "content": "long text"}]),
         provider_preference="openai",
     )
 
@@ -120,7 +120,10 @@ async def test_embeddings_service_keeps_embedding_specific_policy(mocker) -> Non
     service = EmbeddingsService()
     dispatch = mocker.patch.object(service, "_fetch_embedding", new=mocker.AsyncMock(return_value={"ok": True}))
 
-    result = await service.dispatch(Embeddings.model_validate({"input": ["hello"]}), provider_preference="openai")
+    result = await service.dispatch(
+        Embeddings.model_validate({"model": "core-nest/google", "input": ["hello"]}),
+        provider_preference="openai",
+    )
 
     assert result == {"ok": True}
     dispatch.assert_awaited_once_with(
@@ -132,7 +135,13 @@ async def test_embeddings_service_keeps_embedding_specific_policy(mocker) -> Non
 
 
 def test_base_service_completion_request_params_force_stream_off() -> None:
-    params = Completions(messages=[{"role": "user", "content": "hello"}], temperature=0.7, max_tokens=42, top_p=0.9)
+    params = Completions(
+        model="core-nest/auto",
+        messages=[{"role": "user", "content": "hello"}],
+        temperature=0.7,
+        max_tokens=42,
+        top_p=0.9,
+    )
 
     request_params = CompletionService()._request_params(params)
 
@@ -142,6 +151,7 @@ def test_base_service_completion_request_params_force_stream_off() -> None:
 
 def test_completion_service_request_params_are_dumped_from_model_without_internal_fields() -> None:
     params = Completions(
+        model="core-nest/auto",
         messages=[{"role": "user", "content": "hello"}],
         temperature=0.7,
         max_tokens=42,
@@ -179,7 +189,7 @@ def test_completion_service_request_params_are_dumped_from_model_without_interna
 
 
 def test_sentiment_service_request_params_are_dumped_from_model_without_internal_fields() -> None:
-    params = Sentiments(messages=[{"role": "user", "content": "great product"}])
+    params = Sentiments(model="core-nest/google", messages=[{"role": "user", "content": "great product"}])
 
     request_params = SentimentService()._request_params(params)
 
@@ -197,7 +207,7 @@ def test_sentiment_service_request_params_are_dumped_from_model_without_internal
 
 
 def test_summarization_service_request_params_are_dumped_from_model_without_internal_fields() -> None:
-    params = Summarization(messages=[{"role": "user", "content": "long text"}])
+    params = Summarization(model="core-nest/auto", messages=[{"role": "user", "content": "long text"}])
 
     request_params = SummarizationService()._request_params(params)
 
@@ -215,7 +225,7 @@ def test_summarization_service_request_params_are_dumped_from_model_without_inte
 
 
 def test_embeddings_service_request_params_dump_is_empty() -> None:
-    params = Embeddings.model_validate({"input": ["hello"]})
+    params = Embeddings.model_validate({"model": "core-nest/google", "input": ["hello"]})
 
     request_params = EmbeddingsService()._request_params(params)
 
@@ -225,18 +235,18 @@ def test_embeddings_service_request_params_dump_is_empty() -> None:
 
 
 def test_completions_validator_applies_api_managed_defaults() -> None:
-    params = Completions(messages=[{"role": "user", "content": "hello"}])
+    params = Completions(model="core-nest/auto", messages=[{"role": "user", "content": "hello"}])
 
-    assert params.model is None
+    assert params.model == "core-nest/auto"
     assert params.provider is None
     assert params.stream is False
     assert params.stream_options is None
 
 
 def test_summarization_validator_applies_api_managed_defaults() -> None:
-    params = Summarization(messages=[{"role": "user", "content": "long text"}])
+    params = Summarization(model="core-nest/auto", messages=[{"role": "user", "content": "long text"}])
 
-    assert params.model is None
+    assert params.model == "core-nest/auto"
     assert params.provider is None
     assert params.temperature == 0
     assert params.tools is None
@@ -306,6 +316,7 @@ async def test_completion_service_falls_back_on_invalid_json_when_json_requested
 
     result = await service.dispatch(
         Completions(
+            model="core-nest/auto",
             messages=[{"role": "user", "content": "hello"}],
             response_format={"type": "json_object"},
         ),
@@ -358,7 +369,7 @@ async def test_sentiment_service_rejects_invalid_json_from_forced_provider(mocke
 
     with pytest.raises(HTTPException) as exc_info:
         await service.dispatch(
-            Sentiments(messages=[{"role": "user", "content": "great product"}]),
+            Sentiments(model="core-nest/google", messages=[{"role": "user", "content": "great product"}]),
             provider_preference="google",
             request=request,
         )
@@ -410,7 +421,8 @@ async def test_completion_service_surfaces_litellm_param_errors(mocker) -> None:
 
     with pytest.raises(Exception) as exc_info:
         await service.dispatch(
-            Completions(messages=[{"role": "user", "content": "hello"}]), provider_preference="mistral"
+            Completions(model="core-nest/mistral", messages=[{"role": "user", "content": "hello"}]),
+            provider_preference="mistral",
         )
 
     assert getattr(exc_info.value, "status_code", None) == 400
@@ -437,7 +449,7 @@ async def test_completion_service_forced_provider_circuit_open_records_skipped_a
 
     with pytest.raises(HTTPException) as exc_info:
         await service.dispatch(
-            Completions(messages=[{"role": "user", "content": "hello"}]),
+            Completions(model="core-nest/mistral", messages=[{"role": "user", "content": "hello"}]),
             provider_preference="mistral",
             request=request,
         )
@@ -557,7 +569,7 @@ async def test_completion_service_round_robin_respects_circuit_open_and_falls_fo
     mocker.patch("app.api.services.base_service.get_adapter", side_effect=_get_adapter)
 
     result = await service.dispatch(
-        Completions(messages=[{"role": "user", "content": "hello"}]),
+        Completions(model="core-nest/auto", messages=[{"role": "user", "content": "hello"}]),
         request=request,
     )
 
@@ -614,7 +626,7 @@ async def test_embeddings_service_surfaces_litellm_param_errors(mocker) -> None:
 
     with pytest.raises(HTTPException) as exc_info:
         await service.dispatch(
-            Embeddings.model_validate({"input": ["hello"]}),
+            Embeddings.model_validate({"model": "core-nest/openrouter", "input": ["hello"]}),
             provider_preference="openrouter",
             request=request,
         )

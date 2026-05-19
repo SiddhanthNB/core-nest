@@ -38,12 +38,12 @@ def _request_prefix(request: Any = None) -> str:
     return f"[request_id: {str(request_id)[:8]}] " if request_id else ""
 
 
-def _provider_preference_value(request: Any = None, provider_preference: str | None = None) -> str:
-    if provider_preference:
+def _provider_preference_value(request: Any = None, provider_preference: str | None = None) -> str | None:
+    if provider_preference is not None:
         return provider_preference
     audit_context = getattr(getattr(request, "state", None), "audit_context", {})
     request_meta = audit_context.get("request_meta", {})
-    return request_meta.get("provider_pref") or "-"
+    return request_meta.get("provider_pref") or None
 
 
 class BaseService:

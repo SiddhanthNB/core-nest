@@ -46,8 +46,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
 
         process_time_ms = round((time.perf_counter() - start) * 1000, 2)
         logger.info(
-            f"[request_id: {request_id[:8]}] [method: {request.method}] "
-            f"[path: {request.url.path}] [status_code: {response.status_code}] "
+            f"[request_id: {request_id[:8]}] [status_code: {response.status_code}] "
             f"[latency_ms: {process_time_ms}] Request finished"
         )
 

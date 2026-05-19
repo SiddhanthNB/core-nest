@@ -7,12 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.config import constants
 
+from ._helpers import validate_completion_model_alias
 from .completions import _Message
 
 
 class Summarization(BaseModel):
     messages: list[_Message] = Field(..., description="OpenAI-like message list without system messages")
-    model: str | None = None
+    model: str = Field(..., description="CoreNest model alias")
     provider: str | None = None
     temperature: float | None = None
     tools: list[dict[str, Any]] | None = None
@@ -51,6 +52,27 @@ class Summarization(BaseModel):
                 detail="System messages are not allowed for /summaries",
             )
         return value
+
+    @field_validator("stream")
+    @classmethod
+    def _validate_stream(cls, value: bool | None) -> bool | None:
+        if value is True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Streaming is not supported for /beta/summaries",
+            )
+        return value
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, value: str) -> str:
+        try:
+            return validate_completion_model_alias(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
     @model_validator(mode="after")
     def _apply_defaults(self):

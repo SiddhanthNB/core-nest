@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.config import constants
 
+from ._helpers import validate_completion_model_alias
+
 
 class _Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool", "developer"]
@@ -36,7 +38,7 @@ class Completions(BaseModel):
     logprobs: bool | None = None
     top_logprobs: int | None = Field(default=None, gt=0)
     extra_headers: dict[str, str] | None = None
-    model: str | None = None
+    model: str = Field(..., description="CoreNest model alias")
     provider: str | None = None
     stream: bool | None = None
     stream_options: dict[str, Any] | None = None
@@ -71,6 +73,27 @@ class Completions(BaseModel):
                 detail="'messages' must include at least one user message",
             )
         return value
+
+    @field_validator("stream")
+    @classmethod
+    def _validate_stream(cls, value: bool | None) -> bool | None:
+        if value is True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Streaming is not supported for /v1/chat/completions",
+            )
+        return value
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, value: str) -> str:
+        try:
+            return validate_completion_model_alias(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
     @model_validator(mode="after")
     def _apply_defaults(self):

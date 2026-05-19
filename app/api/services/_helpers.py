@@ -63,7 +63,7 @@ def _litellm_request_error(exc: Exception, *, provider: str, model: str, request
     return HTTPException(status_code=status_code, detail=str(exc))
 
 
-async def _ordered_completion_providers(provider_preference: str | None, *, redis_client: Any, request: Any = None) -> list[str]: # fmt: skip
+async def _ordered_completion_providers(provider_preference: str | None, *, redis_client: Any, request: Any = None) -> list[str]:  # fmt: skip
     if provider_preference:
         return [provider_preference]
 
@@ -88,8 +88,7 @@ async def _ordered_completion_providers(provider_preference: str | None, *, redi
     start_index = (counter - 1) % len(providers)
     request_id = getattr(getattr(request, "state", None), "request_id", "-")
     logger.debug(
-        f"[request_id: {request_id[:8] if request_id != '-' else '-'}] "
-        f"Round-robin used with key {round_robin_key}"
+        f"[request_id: {request_id[:8] if request_id != '-' else '-'}] Round-robin used with key {round_robin_key}"
     )
     return providers[start_index:] + providers[:start_index]
 

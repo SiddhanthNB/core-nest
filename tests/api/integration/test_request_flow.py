@@ -93,9 +93,9 @@ async def test_completions_request_flow_cache_hit_persists_audit_row(mocker) -> 
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         response = await client.post(
-            "/completions",
-            headers={"Authorization": "Bearer secret-key", "X-LLM-Provider": "mistral"},
-            json={"messages": [{"role": "user", "content": "hello"}], "temperature": 0.2},
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer secret-key"},
+            json={"model": "core-nest/mistral", "messages": [{"role": "user", "content": "hello"}], "temperature": 0.2},
         )
 
     assert response.status_code == 200
@@ -105,7 +105,7 @@ async def test_completions_request_flow_cache_hit_persists_audit_row(mocker) -> 
     assert kwargs["success"] is True
     assert kwargs["provider"] == "mistral"
     assert kwargs["model"] == "mistral/ministral-8b-2410"
-    assert kwargs["request_meta"] == {"provider_pref": "mistral", "temperature": 0.2, "message_count": 1}
+    assert kwargs["request_meta"] == {"provider_pref": None, "temperature": 0.2, "message_count": 1}
     assert kwargs["response_meta"] == {
         "provider_attempts": [{"provider": "mistral", "model": "mistral/ministral-8b-2410", "status": "succeeded"}],
         "attempt_count": 1,
@@ -148,9 +148,9 @@ async def test_completions_fallback_progression_persists_attempt_stack(mocker) -
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         response = await client.post(
-            "/completions",
+            "/v1/chat/completions",
             headers={"Authorization": "Bearer secret-key"},
-            json={"messages": [{"role": "user", "content": "hello"}]},
+            json={"model": "core-nest/auto", "messages": [{"role": "user", "content": "hello"}]},
         )
 
     assert response.status_code == 200
@@ -174,15 +174,25 @@ async def test_auth_failure_does_not_create_audit_row(mocker) -> None:
 
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        response = await client.post("/completions", json={"messages": [{"role": "user", "content": "hello"}]})
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "core-nest/auto", "messages": [{"role": "user", "content": "hello"}]},
+        )
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Invalid or missing Authorization header"}
+    assert response.json() == {
+        "error": {
+            "message": "Invalid or missing Authorization header",
+            "type": "authentication_error",
+            "param": None,
+            "code": None,
+        }
+    }
     acreate.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_embeddings_without_forced_provider_do_not_cross_fallback(mocker) -> None:
+async def test_embeddings_alias_request_persists_provider_locked_audit_row(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
     mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
@@ -198,24 +208,26 @@ async def test_embeddings_without_forced_provider_do_not_cross_fallback(mocker) 
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         response = await client.post(
-            "/embeddings",
+            "/v1/embeddings",
             headers={"Authorization": "Bearer secret-key"},
-            json={"input": ["hello"]},
+            json={"model": "core-nest/google", "input": ["hello"]},
         )
 
-    assert response.status_code == 400
-    assert response.json() == {"detail": "X-LLM-Provider header is required for embeddings"}
-    get_adapter.assert_not_called()
+    assert response.status_code == 200
+    get_adapter.assert_called_once()
     kwargs = acreate.await_args.kwargs
-    assert kwargs["success"] is False
-    assert kwargs["provider"] is None
-    assert kwargs["model"] is None
+    assert kwargs["success"] is True
+    assert kwargs["provider"] == "google"
+    assert kwargs["model"] == "google-embedding-001"
     assert kwargs["request_meta"] == {"provider_pref": None, "input_count": 1}
-    assert kwargs["response_meta"] == {"provider_attempts": [], "attempt_count": 0}
+    assert kwargs["response_meta"] == {
+        "provider_attempts": [{"provider": "google", "model": "google-embedding-001", "status": "succeeded"}],
+        "attempt_count": 1,
+    }
 
 
 @pytest.mark.asyncio
-async def test_embeddings_reject_provider_without_embedding_support(mocker) -> None:
+async def test_embeddings_reject_unsupported_model_alias_with_openai_error(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
     mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
@@ -228,15 +240,80 @@ async def test_embeddings_reject_provider_without_embedding_support(mocker) -> N
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         response = await client.post(
-            "/embeddings",
-            headers={"Authorization": "Bearer secret-key", "X-LLM-Provider": "groq"},
-            json={"input": ["hello"]},
+            "/v1/embeddings",
+            headers={"Authorization": "Bearer secret-key"},
+            json={"model": "core-nest/groq", "input": ["hello"]},
         )
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Unsupported embedding provider 'groq'"}
+    assert response.json() == {
+        "error": {
+            "message": "Unsupported model 'core-nest/groq'",
+            "type": "invalid_request_error",
+            "param": None,
+            "code": None,
+        }
+    }
     get_adapter.assert_not_called()
     kwargs = acreate.await_args.kwargs
     assert kwargs["success"] is False
     assert kwargs["provider"] is None
     assert kwargs["model"] is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_routes_are_not_exposed(mocker) -> None:
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
+    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
+
+    app = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        completion_response = await client.post(
+            "/completions",
+            json={"model": "core-nest/auto", "messages": [{"role": "user", "content": "hello"}]},
+        )
+        embedding_response = await client.post(
+            "/embeddings",
+            json={"model": "core-nest/google", "input": ["hello"]},
+        )
+        sentiment_response = await client.post(
+            "/sentiments",
+            json={"model": "core-nest/google", "messages": [{"role": "user", "content": "great"}]},
+        )
+        summary_response = await client.post(
+            "/summaries",
+            json={"model": "core-nest/auto", "messages": [{"role": "user", "content": "summarize"}]},
+        )
+
+    assert completion_response.status_code == 404
+    assert embedding_response.status_code == 404
+    assert sentiment_response.status_code == 404
+    assert summary_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_completions_stream_true_returns_openai_error(mocker) -> None:
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
+    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
+
+    app = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer secret-key"},
+            json={
+                "model": "core-nest/auto",
+                "messages": [{"role": "user", "content": "hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "message": "Streaming is not supported for /v1/chat/completions",
+            "type": "invalid_request_error",
+            "param": None,
+            "code": None,
+        }
+    }

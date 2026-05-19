@@ -1,6 +1,6 @@
 import uvicorn
 
-from app.api.core.startup_checks import ensure_no_pending_migrations
+from app.api.core._helpers import ensure_no_pending_migrations
 from app.config import constants
 
 
@@ -15,7 +15,12 @@ def run() -> None:
         "log_config": None,
         "log_level": "warning",
     }
-    if constants.APP_ENV.lower() != "development":
+
+    if constants.APP_ENV.lower() == "development":
+        uvicorn_config["reload"] = True
+        uvicorn_config["workers"] = 1
+    else:
         uvicorn_config["reload"] = False
         uvicorn_config["workers"] = constants.WEB_CONCURRENCY
+
     uvicorn.run("app.api.core.factory:create_app", **uvicorn_config)

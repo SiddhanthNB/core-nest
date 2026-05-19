@@ -10,11 +10,11 @@ from fastapi import HTTPException, status
 load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LLM_DIR = REPO_ROOT / "lib" / "llm"
-PROMPTS_DIR = LLM_DIR / "prompts"
-PYPROJECT_TOML_PATH = REPO_ROOT / "pyproject.toml"
-LLM_PROVIDERS_CONFIG_PATH = REPO_ROOT / "app" / "config" / "llm_providers.yaml"
-API_MANAGED_PARAMS_CONFIG_PATH = REPO_ROOT / "app" / "config" / "api_managed_params.yaml"
+PROMPTS_DIR = REPO_ROOT / "lib" / "llm" / "prompts"
+
+_PYPROJECT_TOML_PATH = REPO_ROOT / "pyproject.toml"
+_LLM_PROVIDERS_CONFIG_PATH = REPO_ROOT / "app" / "config" / "llm_providers.yaml"
+_API_MANAGED_PARAMS_CONFIG_PATH = REPO_ROOT / "app" / "config" / "api_managed_params.yaml"
 
 APP_ENV = os.getenv("APP_ENV", "production")
 APP_PORT = int(os.getenv("PORT", 3000))
@@ -62,15 +62,15 @@ def _load_toml_config(path: Path, name: str) -> dict:
         )
 
 
-_pyproject = _load_toml_config(PYPROJECT_TOML_PATH, "Project metadata")
+_pyproject = _load_toml_config(_PYPROJECT_TOML_PATH, "Project metadata")
 PROJECT_NAME = _pyproject["project"]["name"]
 
 
-_api_managed_params = _load_yaml_config(API_MANAGED_PARAMS_CONFIG_PATH, "API managed params")
+_api_managed_params = _load_yaml_config(_API_MANAGED_PARAMS_CONFIG_PATH, "API managed params")
 
 API_MANAGED_PARAMS = _api_managed_params["endpoints"]
 
-_llm_providers = _load_yaml_config(LLM_PROVIDERS_CONFIG_PATH, "LLM providers")
+_llm_providers = _load_yaml_config(_LLM_PROVIDERS_CONFIG_PATH, "LLM providers")
 
 PROVIDERS = _llm_providers["providers"]
 

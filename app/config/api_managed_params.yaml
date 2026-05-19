@@ -1,28 +1,20 @@
 endpoints:
   completions:
     blocked_params:
-      - model
       - provider
-      - stream
-      - stream_options
     defaults:
-      model: null
       provider: null
       stream: false
       stream_options: null
   sentiments:
     blocked_params:
-      - model
       - provider
       - temperature
       - tools
       - tool_choice
-      - stream
-      - stream_options
       - response_format
       - system_prompt
     defaults:
-      model: null
       provider: null
       temperature: 0
       tools: null
@@ -33,17 +25,13 @@ endpoints:
         type: json_object
   summaries:
     blocked_params:
-      - model
       - provider
       - temperature
       - tools
       - tool_choice
-      - stream
-      - stream_options
       - response_format
       - system_prompt
     defaults:
-      model: null
       provider: null
       temperature: 0
       tools: null
@@ -52,7 +40,5 @@ endpoints:
       stream_options: null
       response_format: null
   embeddings:
-    blocked_params:
-      - model
-    defaults:
-      model: null
+    blocked_params: []
+    defaults: {}

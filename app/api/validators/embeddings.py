@@ -7,10 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.config import constants
 
+from ._helpers import validate_embedding_model_alias
+
 
 class Embeddings(BaseModel):
     input: str | list[str] = Field(..., description="Embedding input payload")
-    model: str | None = None
+    model: str = Field(..., description="CoreNest embedding model alias")
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -33,6 +35,17 @@ class Embeddings(BaseModel):
                 detail="At least one string must be provided in 'input'",
             )
         return value
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, value: str) -> str:
+        try:
+            return validate_embedding_model_alias(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
     @model_validator(mode="after")
     def _apply_defaults(self):
