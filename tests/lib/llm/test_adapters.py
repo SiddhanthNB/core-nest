@@ -4,8 +4,9 @@ from types import SimpleNamespace
 
 import fakeredis.aioredis
 import pytest
-from litellm import Timeout
+from litellm import JSONSchemaValidationError
 
+from app.api.services._helpers import _validate_json_response_payload
 from lib.llm.adapters.base_adapter import BaseAdapter
 from lib.llm.adapters.cerebras_adapter import CerebrasAdapter
 from lib.llm.adapters.groq_adapter import GroqAdapter
@@ -21,20 +22,26 @@ class _Router:
 
 
 class _BaseAdapterUnderTest(BaseAdapter):
-    def __init__(self, *, redis, request=None):
-        super().__init__(provider_name="groq", redis=redis, request=request)
+    def __init__(self, *, redis, request=None, provider_preference=None):
+        super().__init__(
+            provider_name="groq",
+            redis=redis,
+            request=request,
+            provider_preference=provider_preference,
+        )
 
 
 async def _redis():
     return fakeredis.aioredis.FakeRedis(decode_responses=True)
 
 
-def _request(provider_pref: str | None = None):
+def _request(provider_pref: str | None = None, timeout: str | None = None):
     return SimpleNamespace(
+        headers={"X-LLM-Timeout": timeout} if timeout is not None else {},
         state=SimpleNamespace(
             request_id="12345678-1234-1234-1234-123456789abc",
             audit_context={"request_meta": {"provider_pref": provider_pref}},
-        )
+        ),
     )
 
 
@@ -80,35 +87,56 @@ async def test_groq_and_cerebras_remain_completion_only(monkeypatch) -> None:
 async def test_base_adapter_uses_shorter_timeout_for_automatic_provider() -> None:
     adapter = _BaseAdapterUnderTest(redis=await _redis(), request=_request())
 
-    assert adapter._attempt_timeout_seconds() == 5
+    assert adapter._attempt_timeout_seconds() == 15
 
 
 @pytest.mark.asyncio
 async def test_base_adapter_uses_longer_timeout_for_forced_provider() -> None:
-    adapter = _BaseAdapterUnderTest(redis=await _redis(), request=_request("groq"))
+    adapter = _BaseAdapterUnderTest(redis=await _redis(), request=_request(), provider_preference="groq")
 
-    assert adapter._attempt_timeout_seconds() == 10
+    assert adapter._attempt_timeout_seconds() == 30
 
 
 @pytest.mark.asyncio
-async def test_base_adapter_raises_litellm_timeout_on_operation_timeout() -> None:
+async def test_base_adapter_honors_timeout_header_override() -> None:
+    adapter = _BaseAdapterUnderTest(redis=await _redis(), request=_request(timeout="45"))
+
+    assert adapter._attempt_timeout_seconds() == 45
+
+
+@pytest.mark.asyncio
+async def test_base_adapter_clamps_timeout_header_override() -> None:
+    adapter = _BaseAdapterUnderTest(redis=await _redis(), request=_request(timeout="120"))
+
+    assert adapter._attempt_timeout_seconds() == 60
+
+
+@pytest.mark.asyncio
+async def test_base_adapter_ignores_invalid_timeout_header_override() -> None:
+    adapter = _BaseAdapterUnderTest(redis=await _redis(), request=_request(timeout="invalid"))
+
+    assert adapter._attempt_timeout_seconds() == 15
+
+
+@pytest.mark.asyncio
+async def test_base_adapter_retries_same_provider_on_invalid_json_response(mocker) -> None:
     adapter = _BaseAdapterUnderTest(redis=await _redis(), request=_request())
+    adapter._completion_router = SimpleNamespace(
+        acompletion=mocker.AsyncMock(
+            return_value={"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
+        )
+    )
 
-    async def _operation():
-        await __import__("asyncio").sleep(0)
+    with pytest.raises(JSONSchemaValidationError):
+        await adapter.acompletion(
+            messages=[{"role": "user", "content": "hello"}],
+            request_params={"response_format": {"type": "json_object"}},
+            response_validator=lambda payload: _validate_json_response_payload(
+                payload,
+                provider=adapter._provider_name,
+                model=adapter._completion_model,
+                response_format={"type": "json_object"},
+            ),
+        )
 
-    async def _timeout(coro, *args, **kwargs):
-        coro.close()
-        raise TimeoutError
-
-    import lib.llm.adapters.base_adapter as base_adapter_module
-
-    original_wait_for = base_adapter_module.asyncio.wait_for
-    base_adapter_module.asyncio.wait_for = _timeout
-    try:
-        with pytest.raises(Timeout) as exc_info:
-            await adapter._call_with_retry(_operation, model="groq/llama-3.1-8b-instant")
-        assert exc_info.value.status_code == 408
-        assert exc_info.value.llm_provider == "groq"
-    finally:
-        base_adapter_module.asyncio.wait_for = original_wait_for
+    assert adapter._completion_router.acompletion.await_count == 3

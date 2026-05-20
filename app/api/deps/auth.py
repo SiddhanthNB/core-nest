@@ -1,6 +1,7 @@
 import hashlib
 
 from fastapi import HTTPException, Request, status
+from redis.exceptions import RedisError
 
 from app.config.logger import logger
 from app.db.models import Client
@@ -32,10 +33,17 @@ async def auth(request: Request) -> ClientSchema.Read:
     hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
     cache_key = f"client:{hashed_key}"
 
-    cached_client_json = await get_cache(cache_key)
+    try:
+        cached_client_json = await get_cache(cache_key)
+    except RedisError as exc:
+        logger.warning(f"[request_id: {request_id}] Client auth cache read failed with {type(exc).__name__}")
+        cached_client_json = None
     if cached_client_json:
         logger.debug(f"[request_id: {request_id}] Client auth cache hit")
-        await touch_cache(cache_key, ttl=CACHE_TTL)
+        try:
+            await touch_cache(cache_key, ttl=CACHE_TTL)
+        except RedisError as exc:
+            logger.warning(f"[request_id: {request_id}] Client auth cache touch failed with {type(exc).__name__}")
         client_data = ClientSchema.Read.model_validate_json(cached_client_json)
         request.state.client = client_data
         return client_data
@@ -53,6 +61,10 @@ async def auth(request: Request) -> ClientSchema.Read:
 
     client_out = ClientSchema.Read.model_validate(client_record)
     request.state.client = client_out
-    await set_cache(cache_key, client_out.model_dump_json(), ttl=CACHE_TTL)
-    logger.debug(f"[request_id: {request_id}] Client auth cache write")
+    try:
+        await set_cache(cache_key, client_out.model_dump_json(), ttl=CACHE_TTL)
+    except RedisError as exc:
+        logger.warning(f"[request_id: {request_id}] Client auth cache write failed with {type(exc).__name__}")
+    else:
+        logger.debug(f"[request_id: {request_id}] Client auth cache write")
     return client_out

@@ -132,6 +132,59 @@ def test_completions_validator_rejects_stream_true() -> None:
     assert "Streaming is not supported for /v1/chat/completions" in str(exc_info.value)
 
 
+def test_completions_validator_accepts_n_equal_one() -> None:
+    params = Completions.model_validate(
+        {
+            "model": "core-nest/auto",
+            "messages": [{"role": "user", "content": "hello"}],
+            "n": 1,
+            "logprobs": False,
+        }
+    )
+
+    assert params.n == 1
+    assert params.logprobs is False
+
+
+def test_completions_validator_rejects_n_greater_than_one() -> None:
+    with pytest.raises(Exception) as exc_info:
+        Completions.model_validate(
+            {
+                "model": "core-nest/auto",
+                "messages": [{"role": "user", "content": "hello"}],
+                "n": 2,
+            }
+        )
+
+    assert "Only n=1 is supported for /v1/chat/completions" in str(exc_info.value)
+
+
+def test_completions_validator_rejects_logprobs_true() -> None:
+    with pytest.raises(Exception) as exc_info:
+        Completions.model_validate(
+            {
+                "model": "core-nest/auto",
+                "messages": [{"role": "user", "content": "hello"}],
+                "logprobs": True,
+            }
+        )
+
+    assert "logprobs=true is not supported for /v1/chat/completions" in str(exc_info.value)
+
+
+def test_completions_validator_rejects_top_logprobs() -> None:
+    with pytest.raises(Exception) as exc_info:
+        Completions.model_validate(
+            {
+                "model": "core-nest/auto",
+                "messages": [{"role": "user", "content": "hello"}],
+                "top_logprobs": 5,
+            }
+        )
+
+    assert "top_logprobs is not supported for /v1/chat/completions" in str(exc_info.value)
+
+
 def test_embeddings_validator_rejects_legacy_texts_alias() -> None:
     with pytest.raises(Exception):
         Embeddings.model_validate({"model": "core-nest/google", "texts": ["hello"]})
@@ -287,8 +340,7 @@ async def test_completions_controller_returns_public_model_and_headers(mocker) -
 
     assert response.status_code == 200
     assert response.body == b'{"id":"cmpl_1","object":"chat.completion","model":"core-nest/google","choices":[]}'
-    assert response.headers["X-LLM-Provider"] == "google"
-    assert response.headers["X-LLM-Model"] == "google/gemini-2.5-flash-lite"
+    assert response.headers["X-LLM-Backend"] == "google:google/gemini-2.5-flash-lite"
 
 
 @pytest.mark.asyncio
@@ -321,8 +373,7 @@ async def test_embeddings_controller_returns_public_model_and_headers(mocker) ->
 
     assert response.status_code == 200
     assert response.body == b'{"object":"list","data":[{"embedding":[0.1,0.2],"index":0}],"model":"core-nest/google"}'
-    assert response.headers["X-LLM-Provider"] == "google"
-    assert response.headers["X-LLM-Model"] == "google/text-embedding-004"
+    assert response.headers["X-LLM-Backend"] == "google:google/text-embedding-004"
 
 
 @pytest.mark.asyncio

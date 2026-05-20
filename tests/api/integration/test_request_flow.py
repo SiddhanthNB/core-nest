@@ -35,9 +35,11 @@ def _cached_client_json() -> str:
 
 
 def _fake_completion_adapter(*, provider: str, model: str, payload: dict, error: Exception | None = None):
-    async def _acompletion(*, messages, request_params):
+    async def _acompletion(*, messages, request_params, response_validator=None):
         if error is not None:
             raise error
+        if response_validator is not None:
+            response_validator(payload)
         return payload
 
     return SimpleNamespace(
@@ -185,7 +187,7 @@ async def test_auth_failure_does_not_create_audit_row(mocker) -> None:
             "message": "Invalid or missing Authorization header",
             "type": "authentication_error",
             "param": None,
-            "code": None,
+            "code": "missing_authorization_header",
         }
     }
     acreate.assert_not_called()
@@ -250,8 +252,8 @@ async def test_embeddings_reject_unsupported_model_alias_with_openai_error(mocke
         "error": {
             "message": "Unsupported model 'core-nest/groq'",
             "type": "invalid_request_error",
-            "param": None,
-            "code": None,
+            "param": "model",
+            "code": "unsupported_model",
         }
     }
     get_adapter.assert_not_called()
@@ -313,7 +315,106 @@ async def test_completions_stream_true_returns_openai_error(mocker) -> None:
         "error": {
             "message": "Streaming is not supported for /v1/chat/completions",
             "type": "invalid_request_error",
-            "param": None,
-            "code": None,
+            "param": "stream",
+            "code": "unsupported_streaming",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_completions_missing_model_returns_openai_validation_error(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
+    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
+    mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
+
+    app = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer secret-key"},
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "message": "Missing required field 'model'",
+            "type": "invalid_request_error",
+            "param": "model",
+            "code": "missing_field",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_completions_invalid_role_returns_openai_validation_error(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
+    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
+    mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
+
+    app = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer secret-key"},
+            json={"model": "core-nest/auto", "messages": [{"role": "bad-role", "content": "hello"}]},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "invalid_request_error"
+    assert response.json()["error"]["param"] == "role"
+    assert response.json()["error"]["code"] == "invalid_value"
+
+
+@pytest.mark.asyncio
+async def test_completions_n_greater_than_one_returns_openai_error(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
+    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
+    mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
+
+    app = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer secret-key"},
+            json={"model": "core-nest/auto", "messages": [{"role": "user", "content": "hello"}], "n": 2},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "message": "Only n=1 is supported for /v1/chat/completions",
+            "type": "invalid_request_error",
+            "param": "n",
+            "code": "unsupported_n",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_completions_logprobs_true_returns_openai_error(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
+    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
+    mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
+
+    app = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer secret-key"},
+            json={"model": "core-nest/auto", "messages": [{"role": "user", "content": "hello"}], "logprobs": True},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "message": "logprobs=true is not supported for /v1/chat/completions",
+            "type": "invalid_request_error",
+            "param": "logprobs",
+            "code": "unsupported_logprobs",
         }
     }

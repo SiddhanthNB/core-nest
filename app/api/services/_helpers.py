@@ -27,16 +27,27 @@ def _provider_attempts(request: Any) -> list[dict[str, Any]]:
     return provider_attempts
 
 
-def _response_meta(provider_attempts: list[dict[str, Any]], *, payload: Mapping[str, Any]) -> dict[str, Any]:
+def _payload_mapping(payload: Any) -> Mapping[str, Any]:
+    if isinstance(payload, Mapping):
+        return payload
+    if hasattr(payload, "model_dump"):
+        normalized = payload.model_dump(exclude_none=True)
+        return normalized if isinstance(normalized, Mapping) else {}
+    normalized = jsonable_encoder(payload, exclude_none=True)
+    return normalized if isinstance(normalized, Mapping) else {}
+
+
+def _response_meta(provider_attempts: list[dict[str, Any]], *, payload: Any) -> dict[str, Any]:
+    payload_mapping = _payload_mapping(payload)
     response_meta = {
         "provider_attempts": provider_attempts,
         "attempt_count": len([attempt for attempt in provider_attempts if attempt.get("status") != "skipped"]),
     }
-    choices = payload.get("choices") or []
+    choices = payload_mapping.get("choices") or []
     if choices:
         response_meta["finish_reason"] = choices[0].get("finish_reason")
-    if payload.get("usage") is not None:
-        response_meta["usage"] = jsonable_encoder(payload["usage"], exclude_none=True)
+    if payload_mapping.get("usage") is not None:
+        response_meta["usage"] = jsonable_encoder(payload_mapping["usage"], exclude_none=True)
     return response_meta
 
 
@@ -103,8 +114,9 @@ def _expects_json_response(request_params: Mapping[str, Any]) -> bool:
     return isinstance(response_format, Mapping) and response_format.get("type") in {"json_object", "json_schema"}
 
 
-def _extract_response_content(payload: Mapping[str, Any]) -> str | None:
-    choices = payload.get("choices") or []
+def _extract_response_content(payload: Any) -> str | None:
+    payload_mapping = _payload_mapping(payload)
+    choices = payload_mapping.get("choices") or []
     if not choices:
         return None
     first_choice = choices[0]
@@ -118,7 +130,7 @@ def _extract_response_content(payload: Mapping[str, Any]) -> str | None:
     return content if isinstance(content, str) else None
 
 
-def _validate_json_response_payload(payload: Mapping[str, Any], *, provider: str, model: str, response_format: Any) -> None:  # fmt: skip
+def _validate_json_response_payload(payload: Any, *, provider: str, model: str, response_format: Any) -> None:  # fmt: skip
     content = _extract_response_content(payload)
     if not content or not content.strip():
         raise JSONSchemaValidationError(

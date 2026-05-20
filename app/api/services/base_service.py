@@ -21,6 +21,7 @@ from ._helpers import (
     _expects_json_response,
     _litellm_request_error,
     _ordered_completion_providers,
+    _payload_mapping,
     _provider_attempts,
     _response_meta,
     _set_response_meta,
@@ -74,7 +75,12 @@ class BaseService:
             logger.debug(f"{request_prefix}Resolved provider candidates: {' -> '.join(providers)}")
 
         for index, provider_name in enumerate(providers):
-            adapter = get_adapter(provider_name, redis=redis_client, request=request)
+            adapter = get_adapter(
+                provider_name,
+                redis=redis_client,
+                request=request,
+                provider_preference=provider_preference,
+            )
             resolved_provider = adapter._provider_name
             model = adapter._completion_model
 
@@ -97,13 +103,33 @@ class BaseService:
                 continue
 
             try:
-                payload = await adapter.acompletion(messages=messages, request_params=request_params)
+                payload = await adapter.acompletion(
+                    messages=messages,
+                    request_params=request_params,
+                    response_validator=(
+                        lambda payload: _validate_json_response_payload(
+                            payload,
+                            provider=resolved_provider,
+                            model=model,
+                            response_format=request_params.get("response_format"),
+                        )
+                    )
+                    if _expects_json_response(request_params)
+                    else None,
+                )
             except Exception as exc:
                 provider_attempts.append(
                     {"provider": resolved_provider, "model": model, "status": "failed", "error": type(exc).__name__}
                 )
                 last_error = exc
-                if provider_preference:
+                if isinstance(exc, JSONSchemaValidationError):
+                    if provider_preference:
+                        logger.warning(
+                            f"{request_prefix}Requested provider '{resolved_provider}' returned invalid JSON"
+                        )
+                    else:
+                        logger.warning(f"{request_prefix}Provider '{resolved_provider}' returned invalid JSON")
+                elif provider_preference:
                     logger.warning(
                         f"{request_prefix}Requested provider '{resolved_provider}' failed with {type(exc).__name__}"
                     )
@@ -113,6 +139,11 @@ class BaseService:
                     _set_response_meta(request, _response_meta(provider_attempts, payload={}))
                     if isinstance(exc, HTTPException):
                         raise
+                    if isinstance(exc, JSONSchemaValidationError):
+                        raise HTTPException(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail=f"Provider '{resolved_provider}' returned invalid JSON",
+                        ) from exc
                     if isinstance(exc, _LITELLM_REQUEST_ERRORS):
                         raise _litellm_request_error(
                             exc,
@@ -132,37 +163,7 @@ class BaseService:
                     )
                 continue
 
-            try:
-                if _expects_json_response(request_params):
-                    _validate_json_response_payload(
-                        payload,
-                        provider=resolved_provider,
-                        model=model,
-                        response_format=request_params.get("response_format"),
-                    )
-            except JSONSchemaValidationError as exc:
-                provider_attempts.append(
-                    {"provider": resolved_provider, "model": model, "status": "failed", "error": type(exc).__name__}
-                )
-                last_error = exc
-                if provider_preference:
-                    logger.warning(f"{request_prefix}Requested provider '{resolved_provider}' returned invalid JSON")
-                else:
-                    logger.warning(f"{request_prefix}Provider '{resolved_provider}' returned invalid JSON")
-                if provider_preference:
-                    _set_response_meta(request, _response_meta(provider_attempts, payload={}))
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=f"Provider '{resolved_provider}' returned invalid JSON",
-                    ) from exc
-                next_provider = providers[index + 1] if index + 1 < len(providers) else None
-                if next_provider:
-                    logger.debug(
-                        f"{request_prefix}Falling back from provider '{resolved_provider}' to provider '{next_provider}' "
-                        f"after {type(exc).__name__}"
-                    )
-                continue
-
+            payload = _payload_mapping(payload)
             provider_attempts.append({"provider": resolved_provider, "model": model, "status": "succeeded"})
             if provider_preference:
                 logger.debug(f"{request_prefix}Requested provider '{resolved_provider}' succeeded")
@@ -205,7 +206,12 @@ class BaseService:
             )
 
         provider_attempts = _provider_attempts(request)
-        adapter = get_adapter(provider_preference, redis=redis_client, request=request)
+        adapter = get_adapter(
+            provider_preference,
+            redis=redis_client,
+            request=request,
+            provider_preference=provider_preference,
+        )
         resolved_provider = adapter._provider_name
         request_prefix = _request_prefix(request)
         provider_preference_value = _provider_preference_value(request, provider_preference)
@@ -253,6 +259,7 @@ class BaseService:
                 detail=f"Provider '{resolved_provider}' failed",
             ) from exc
 
+        payload = _payload_mapping(payload)
         provider_attempts.append(
             {"provider": resolved_provider, "model": adapter._embedding_model, "status": "succeeded"}
         )

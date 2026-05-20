@@ -84,6 +84,36 @@ class Completions(BaseModel):
             )
         return value
 
+    @field_validator("n")
+    @classmethod
+    def _validate_n(cls, value: int | None) -> int | None:
+        if value is not None and value != 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only n=1 is supported for /v1/chat/completions",
+            )
+        return value
+
+    @field_validator("logprobs")
+    @classmethod
+    def _validate_logprobs(cls, value: bool | None) -> bool | None:
+        if value is True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="logprobs=true is not supported for /v1/chat/completions",
+            )
+        return value
+
+    @field_validator("top_logprobs")
+    @classmethod
+    def _validate_top_logprobs(cls, value: int | None) -> int | None:
+        if value is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="top_logprobs is not supported for /v1/chat/completions",
+            )
+        return value
+
     @field_validator("model")
     @classmethod
     def _validate_model(cls, value: str) -> str:

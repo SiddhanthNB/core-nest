@@ -9,7 +9,12 @@ from litellm import UnsupportedParamsError
 from litellm.types.utils import Usage
 from redis.exceptions import RedisError
 
-from app.api.services._helpers import _completion_round_robin_key, _ordered_completion_providers, _response_meta
+from app.api.services._helpers import (
+    _completion_round_robin_key,
+    _ordered_completion_providers,
+    _response_meta,
+    _validate_json_response_payload,
+)
 from app.api.services.completion_service import CompletionService
 from app.api.services.embeddings_service import EmbeddingsService
 from app.api.services.sentiment_service import SentimentService
@@ -30,10 +35,13 @@ def _completion_adapter(*, provider: str, model: str, mocker, redis=None, payloa
             return False
         return bool(await redis.exists(f"circuit:{provider}:open"))
 
-    async def _acompletion(*, messages, request_params):
-        return payload or {
+    async def _acompletion(*, messages, request_params, response_validator=None):
+        response_payload = payload or {
             "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
         }
+        if response_validator is not None:
+            response_validator(response_payload)
+        return response_payload
 
     return type(
         "_Adapter",
@@ -70,10 +78,7 @@ async def test_sentiments_service_enforces_locked_execution_policy(mocker) -> No
         ],
         request_params={
             "temperature": 0,
-            "tools": None,
-            "tool_choice": None,
             "stream": False,
-            "stream_options": None,
             "response_format": {"type": "json_object"},
         },
         provider_preference="google",
@@ -104,11 +109,7 @@ async def test_summarization_service_enforces_locked_execution_policy(mocker) ->
         ],
         request_params={
             "temperature": 0,
-            "tools": None,
-            "tool_choice": None,
             "stream": False,
-            "stream_options": None,
-            "response_format": None,
         },
         provider_preference="openai",
         request=None,
@@ -146,7 +147,7 @@ def test_base_service_completion_request_params_force_stream_off() -> None:
     request_params = CompletionService()._request_params(params)
 
     assert request_params["stream"] is False
-    assert request_params["stream_options"] is None
+    assert "stream_options" not in request_params
 
 
 def test_completion_service_request_params_are_dumped_from_model_without_internal_fields() -> None:
@@ -162,26 +163,9 @@ def test_completion_service_request_params_are_dumped_from_model_without_interna
 
     assert request_params == {
         "temperature": 0.7,
-        "max_completion_tokens": None,
         "max_tokens": 42,
-        "top_p": None,
-        "n": None,
-        "presence_penalty": None,
-        "frequency_penalty": None,
-        "stop": None,
-        "functions": None,
-        "function_call": None,
-        "logit_bias": None,
-        "user": None,
-        "tools": None,
-        "tool_choice": None,
         "response_format": {"type": "json_object"},
-        "seed": None,
-        "logprobs": None,
-        "top_logprobs": None,
-        "extra_headers": None,
         "stream": False,
-        "stream_options": None,
     }
     assert "messages" not in request_params
     assert "model" not in request_params
@@ -195,10 +179,7 @@ def test_sentiment_service_request_params_are_dumped_from_model_without_internal
 
     assert request_params == {
         "temperature": 0,
-        "tools": None,
-        "tool_choice": None,
         "stream": False,
-        "stream_options": None,
         "response_format": {"type": "json_object"},
     }
     assert "messages" not in request_params
@@ -213,11 +194,7 @@ def test_summarization_service_request_params_are_dumped_from_model_without_inte
 
     assert request_params == {
         "temperature": 0,
-        "tools": None,
-        "tool_choice": None,
         "stream": False,
-        "stream_options": None,
-        "response_format": None,
     }
     assert "messages" not in request_params
     assert "model" not in request_params
@@ -273,11 +250,57 @@ def test_base_service_response_meta_normalizes_litellm_usage() -> None:
     }
 
 
+def test_json_validation_and_response_meta_accept_model_like_payload() -> None:
+    class _ModelLikePayload:
+        def model_dump(self, exclude_none=True):
+            return {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"content": '{"ok": true}'},
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
+            }
+
+    payload = _ModelLikePayload()
+
+    _validate_json_response_payload(
+        payload,
+        provider="google",
+        model="gemini/gemini-2.5-flash-lite",
+        response_format={"type": "json_object"},
+    )
+
+    assert _response_meta(
+        [{"provider": "google", "model": "gemini/gemini-2.5-flash-lite", "status": "succeeded"}],
+        payload=payload,
+    ) == {
+        "provider_attempts": [{"provider": "google", "model": "gemini/gemini-2.5-flash-lite", "status": "succeeded"}],
+        "attempt_count": 1,
+        "finish_reason": "stop",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
+    }
+
+
 @pytest.mark.asyncio
 async def test_completion_service_falls_back_on_invalid_json_when_json_requested(mocker) -> None:
     service = CompletionService()
     request = _request()
     mocker.patch("app.api.services.base_service.redis_client", object())
+
+    async def _invalid_json_payload(*, messages, request_params, response_validator=None):
+        payload = {"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
+        if response_validator is not None:
+            response_validator(payload)
+        return payload
+
+    async def _valid_json_payload(*, messages, request_params, response_validator=None):
+        payload = {"choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}]}
+        if response_validator is not None:
+            response_validator(payload)
+        return payload
+
     mocker.patch(
         "app.api.services.base_service.get_adapter",
         side_effect=[
@@ -288,11 +311,7 @@ async def test_completion_service_falls_back_on_invalid_json_when_json_requested
                     "_provider_name": "mistral",
                     "_completion_model": "mistral/ministral-8b-2410",
                     "is_circuit_open": staticmethod(mocker.AsyncMock(return_value=False)),
-                    "acompletion": staticmethod(
-                        mocker.AsyncMock(
-                            return_value={"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
-                        )
-                    ),
+                    "acompletion": staticmethod(mocker.AsyncMock(side_effect=_invalid_json_payload)),
                 },
             )(),
             type(
@@ -302,13 +321,7 @@ async def test_completion_service_falls_back_on_invalid_json_when_json_requested
                     "_provider_name": "google",
                     "_completion_model": "gemini/gemini-2.5-flash-lite",
                     "is_circuit_open": staticmethod(mocker.AsyncMock(return_value=False)),
-                    "acompletion": staticmethod(
-                        mocker.AsyncMock(
-                            return_value={
-                                "choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}]
-                            }
-                        )
-                    ),
+                    "acompletion": staticmethod(mocker.AsyncMock(side_effect=_valid_json_payload)),
                 },
             )(),
         ],
@@ -349,6 +362,13 @@ async def test_sentiment_service_rejects_invalid_json_from_forced_provider(mocke
     request = _request()
     mocker.patch.object(service, "_get_system_prompt", return_value="system sentiment prompt")
     mocker.patch("app.api.services.base_service.redis_client", object())
+
+    async def _invalid_json_payload(*, messages, request_params, response_validator=None):
+        payload = {"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
+        if response_validator is not None:
+            response_validator(payload)
+        return payload
+
     mocker.patch(
         "app.api.services.base_service.get_adapter",
         return_value=type(
@@ -358,11 +378,7 @@ async def test_sentiment_service_rejects_invalid_json_from_forced_provider(mocke
                 "_provider_name": "google",
                 "_completion_model": "gemini/gemini-2.5-flash-lite",
                 "is_circuit_open": staticmethod(mocker.AsyncMock(return_value=False)),
-                "acompletion": staticmethod(
-                    mocker.AsyncMock(
-                        return_value={"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
-                    )
-                ),
+                "acompletion": staticmethod(mocker.AsyncMock(side_effect=_invalid_json_payload)),
             },
         )(),
     )
@@ -542,7 +558,7 @@ async def test_completion_service_round_robin_respects_circuit_open_and_falls_fo
     mocker.patch("app.api.services.base_service.redis_client", fake_redis)
     mocker.patch("app.api.services.base_service.constants.COMPLETION_PROVIDERS", ("mistral", "google", "openrouter"))
 
-    def _get_adapter(provider_name, *, redis, request=None):
+    def _get_adapter(provider_name, *, redis, request=None, provider_preference=None):
         adapters = {
             "google": _completion_adapter(
                 provider="google",

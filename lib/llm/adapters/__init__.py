@@ -22,9 +22,15 @@ _ADAPTERS = {
 }
 
 
-def get_adapter(provider_name: str, *, redis: Redis, request: Any = None) -> BaseAdapter:
+def get_adapter(
+    provider_name: str,
+    *,
+    redis: Redis,
+    request: Any = None,
+    provider_preference: str | None = None,
+) -> BaseAdapter:
     adapter_class = _ADAPTERS[provider_name]
-    return adapter_class(redis=redis, request=request)
+    return adapter_class(redis=redis, request=request, provider_preference=provider_preference)
 
 
 __all__ = [

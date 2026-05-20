@@ -69,9 +69,11 @@ def _success_response(*, payload: Any, request: Request, public_model: str | Non
 
     provider = final_attempt.get("provider")
     model = final_attempt.get("model")
-    if provider:
-        response.headers["X-LLM-Provider"] = provider
-    if model:
-        response.headers["X-LLM-Model"] = model
+    if provider and model:
+        response.headers["X-LLM-Backend"] = f"{provider}:{model}"
+    elif provider:
+        response.headers["X-LLM-Backend"] = provider
+    elif model:
+        response.headers["X-LLM-Backend"] = model
 
     return response

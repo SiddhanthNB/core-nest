@@ -1,20 +1,17 @@
 CoreNest
 ========
 
-CoreNest is an OpenAI-like LLM gateway for teams that want one stable API surface across multiple providers, while keeping routing, fallback, and operational policy under application control.
+CoreNest is an OpenAI-compatible LLM gateway that sits in front of multiple providers.
 
-It is built for production use cases where you want:
+It gives you:
 
 - one client-facing contract
-- multiple model providers behind it
-- provider fallback owned by your application, not by the SDK
-- Redis-backed circuit breaking and request throttling
-- audit logging for request and response metadata
-- opinionated endpoints for common tasks like sentiment analysis and summarization
+- app-owned routing and fallback
+- a few opinionated endpoints for common tasks
 
 ## Why CoreNest
 
-Most LLM integrations start simple and then become operationally messy:
+Most LLM integrations start simple and then become messy:
 
 - provider outages leak into application code
 - request parameters drift between providers
@@ -23,11 +20,11 @@ Most LLM integrations start simple and then become operationally messy:
 
 CoreNest gives you a cleaner shape:
 
-- OpenAI-like request and response contracts
+- OpenAI-compatible request and response contracts
 - provider abstraction via LiteLLM
 - app-owned fallback and circuit-breaker behavior
-- provider-pinned embeddings
-- explicit operator-controlled provider enablement
+- stable `core-nest/*` model aliases
+- explicit provider enablement
 - request-level provider traceability via response headers
 
 ## Quick Start
@@ -40,27 +37,39 @@ Authentication:
 Authorization: Bearer <API_KEY>
 ```
 
-Optional provider override for completions and opinionated text endpoints:
+Public routes:
 
-```http
-X-LLM-Provider: mistral
-```
+- `/v1/chat/completions`
+- `/v1/embeddings`
+- `/beta/sentiments`
+- `/beta/summaries`
 
-For `/embeddings`, `X-LLM-Provider` is required.
+Public model aliases:
+
+- `core-nest/auto`
+- `core-nest/google`
+- `core-nest/groq`
+- `core-nest/cerebras`
+- `core-nest/mistral`
+- `core-nest/huggingface`
+- `core-nest/openrouter`
+
+`core-nest/auto` is only valid for chat-style endpoints. It enables CoreNest-owned provider routing and fallback.
 
 ## Consumer Quickstart
 
 ### Completions
 
-`POST /completions`
+`POST /v1/chat/completions`
 
-Use this when you want a flexible, OpenAI-like chat/completions endpoint.
+Use this when you want an OpenAI-compatible chat/completions endpoint that can power agentic workflows while keeping provider routing under CoreNest control.
 
 ```bash
-curl -X POST http://localhost:3000/completions \
+curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
+    "model": "core-nest/auto",
     "messages": [
       {"role": "user", "content": "Write a haiku about databases"}
     ],
@@ -72,22 +81,46 @@ curl -X POST http://localhost:3000/completions \
 Behavior:
 
 - user supplies `messages`
-- request shape is OpenAI-like
-- app manages `model`, `provider`, `stream`, and `stream_options`
-- if no provider is forced, CoreNest selects from enabled completion providers
-- if `X-LLM-Provider` is present, only that provider is tried
+- request shape is OpenAI-compatible
+- caller supplies a CoreNest model alias via `model`
+- `core-nest/auto` enables CoreNest-owned provider routing and fallback
+- `core-nest/<provider>` locks execution to a specific provider
+- `stream=false` is accepted, but streaming is not supported
+
+### Embeddings
+
+`POST /v1/embeddings`
+
+Use this when you want an OpenAI-compatible embeddings endpoint without cross-provider fallback.
+
+```bash
+curl -X POST http://localhost:3000/v1/embeddings \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "core-nest/google",
+    "input": ["hello world", "bye"]
+  }'
+```
+
+Behavior:
+
+- caller must choose a provider-specific CoreNest model alias
+- no cross-provider fallback is used
+- `core-nest/auto` is not valid for embeddings
 
 ### Sentiments
 
-`POST /sentiments`
+`POST /beta/sentiments`
 
 Use this when you want structured sentiment output without letting callers control the system prompt or execution policy.
 
 ```bash
-curl -X POST http://localhost:3000/sentiments \
+curl -X POST http://localhost:3000/beta/sentiments \
   -H "Authorization: Bearer <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
+    "model": "core-nest/auto",
     "messages": [
       {"role": "user", "content": "I loved the product."}
     ]
@@ -100,18 +133,20 @@ Behavior:
 - CoreNest injects the system prompt
 - response format is app-owned JSON
 - execution policy fields are locked by the application
+- provider routing follows the same model-alias rules as chat completions
 
 ### Summaries
 
-`POST /summaries`
+`POST /beta/summaries`
 
 Use this when you want an opinionated summarization endpoint with an app-controlled prompt and execution policy.
 
 ```bash
-curl -X POST http://localhost:3000/summaries \
+curl -X POST http://localhost:3000/beta/summaries \
   -H "Authorization: Bearer <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
+    "model": "core-nest/auto",
     "messages": [
       {"role": "user", "content": "Summarize this article..."}
     ]
@@ -123,28 +158,7 @@ Behavior:
 - caller must not send `system` messages
 - CoreNest injects the system prompt
 - provider selection follows completion routing rules
-
-### Embeddings
-
-`POST /embeddings`
-
-Use this when you want embeddings from a specific provider without cross-provider fallback.
-
-```bash
-curl -X POST http://localhost:3000/embeddings \
-  -H "Authorization: Bearer <API_KEY>" \
-  -H "X-LLM-Provider: google" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "input": ["hello world", "bye"]
-  }'
-```
-
-Behavior:
-
-- `X-LLM-Provider` is required
-- no cross-provider fallback is used
-- app manages `model`
+- summaries are plain-text oriented; JSON output is not app-supported here
 
 ## Response Contract
 
@@ -152,32 +166,31 @@ Successful responses are returned without a custom success envelope.
 
 That means:
 
-- `/completions` returns an OpenAI-like completion payload
-- `/embeddings` returns an OpenAI-like embedding payload
-- opinionated endpoints also return LiteLLM/OpenAI-like payloads
+- `/v1/chat/completions` returns an OpenAI-compatible completion payload
+- `/v1/embeddings` returns an OpenAI-compatible embedding payload
+- opinionated endpoints return the same payload family while preserving their app-owned execution rules
 
-CoreNest also includes response headers that tell the caller what actually served the request:
+The response body keeps the public CoreNest model alias the client requested. CoreNest also includes a response header that tells the caller what actually served the request:
 
 ```http
-X-LLM-Provider: mistral
-X-LLM-Model: mistral/ministral-8b-2410
+X-LLM-Backend: mistral:mistral/ministral-8b-2410
 ```
 
-This matters when fallback is enabled and the final provider may vary.
+This matters when fallback is enabled and the final provider may vary from one request to the next.
 
 ## Routing and Fallback
 
-Completion-style routes (`/completions`, `/sentiments`, `/summaries`) use application-owned routing.
+Chat-style routes (`/v1/chat/completions`, `/beta/sentiments`, `/beta/summaries`) use application-owned routing.
 
 Current behavior:
 
 - enabled providers are derived from [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml)
 - provider order follows declaration order in that config
-- when no provider is forced, CoreNest rotates the starting provider via Redis-backed round robin
+- when `model=core-nest/auto`, CoreNest rotates the starting provider via Redis-backed round robin
 - fallback proceeds through the remaining providers
 - open-circuit providers are skipped
 
-If `X-LLM-Provider` is present:
+If `model=core-nest/<provider>` is used:
 
 - only that provider is eligible
 - no cross-provider fallback is used
@@ -185,7 +198,7 @@ If `X-LLM-Provider` is present:
 
 Embeddings are stricter:
 
-- `X-LLM-Provider` is required
+- caller must choose a provider-specific model alias
 - no cross-provider fallback is allowed
 
 ## Request Validation
@@ -205,12 +218,31 @@ Examples:
 
 - unsupported provider-specific params become runtime provider errors
 - invalid JSON from a provider is treated as provider failure when JSON is required
-- `/sentiments` always expects valid JSON output
-- `/completions` only enforces JSON output when the caller explicitly requests it
+- `/beta/sentiments` always expects valid JSON output
+- `/beta/summaries` does not support JSON output as an app-level contract
+- `/v1/chat/completions` accepts common OpenAI client fields like `stream=false`, but rejects unsupported active behavior like `stream=true`
+
+## OpenAI Compatibility
+
+CoreNest is designed to be OpenAI-compatible enough to power agentic workflows, not to be a full OpenAI feature clone.
+
+That means:
+
+- standard bearer-token auth works with OpenAI-style clients
+- `/v1/chat/completions` and `/v1/embeddings` follow an OpenAI-compatible HTTP surface
+- request and response bodies are compatible enough for non-streaming SDK workflows
+- error responses use an OpenAI-style error envelope
+
+Intentional differences:
+
+- `model` is a CoreNest alias such as `core-nest/auto` or `core-nest/google`
+- streaming is not supported
+- provider switching, circuit breaking, and fallback remain CoreNest-owned behavior
+- beta endpoints stay opinionated even though they use the same general payload family
 
 ## Auth, Rate Limits, and Audit
 
-CoreNest includes request-level operational controls:
+CoreNest includes request-level controls:
 
 - bearer-token client auth
 - Redis-backed client caching
@@ -222,7 +254,7 @@ Audit logging records request/response metadata, including provider attempt stac
 
 ## Configuration
 
-Primary runtime config:
+Main config:
 
 - [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml)
   - provider identity
@@ -253,7 +285,7 @@ Before the server starts, CoreNest checks for pending migrations. If the databas
 
 ## Environment
 
-Core runtime settings come from `.env`.
+Runtime settings come from `.env`.
 
 Base variables:
 
@@ -283,7 +315,7 @@ CEREBRAS_API_KEY=
 
 ## Database and Migrations
 
-CoreNest uses Duo ORM as the database foundation while preserving Alembic migration history.
+CoreNest uses [Duo ORM](https://github.com/SiddhanthNB/duo-orm) as the database foundation while preserving Alembic migration history.
 
 Common commands:
 

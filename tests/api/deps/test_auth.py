@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from redis.exceptions import RedisError
 from starlette.requests import Request
 
 from app.api.deps.auth import CACHE_TTL, auth
@@ -91,3 +92,54 @@ async def test_auth_db_miss_eager_loads_rate_limit_config_and_caches(mocker) -> 
     where.assert_called_once()
     assert fake_query.limit_value == 1
     set_cache.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_auth_falls_back_to_db_when_cache_read_fails(mocker) -> None:
+    request = _request_with_auth()
+    orm_client = _client_payload()
+
+    class _FakeQuery:
+        def __init__(self, results):
+            self.results = results
+
+        def limit(self, value):
+            return self
+
+        async def aexec(self):
+            return self.results
+
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(side_effect=RedisError("boom")))
+    set_cache = mocker.patch("app.api.deps.auth.set_cache", new=mocker.AsyncMock())
+    where = mocker.patch("app.api.deps.auth.Client.where", return_value=_FakeQuery([orm_client]))
+
+    client = await auth(request)
+
+    assert request.state.client == client
+    where.assert_called_once()
+    set_cache.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_auth_succeeds_when_cache_write_fails(mocker) -> None:
+    request = _request_with_auth()
+    orm_client = _client_payload()
+
+    class _FakeQuery:
+        def __init__(self, results):
+            self.results = results
+
+        def limit(self, value):
+            return self
+
+        async def aexec(self):
+            return self.results
+
+    mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=None))
+    mocker.patch("app.api.deps.auth.set_cache", new=mocker.AsyncMock(side_effect=RedisError("boom")))
+    where = mocker.patch("app.api.deps.auth.Client.where", return_value=_FakeQuery([orm_client]))
+
+    client = await auth(request)
+
+    assert request.state.client == client
+    where.assert_called_once()

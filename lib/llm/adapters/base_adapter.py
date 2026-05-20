@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -10,6 +9,7 @@ from litellm import (
     APIError,
     BadGatewayError,
     InternalServerError,
+    JSONSchemaValidationError,
     RateLimitError,
     ServiceUnavailableError,
     Timeout,
@@ -24,8 +24,9 @@ _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_COOLDOWN_SECONDS = 60
 _CIRCUIT_FAILURE_TTL_SECONDS = 600
 _DEFAULT_RETRY_WAIT = wait_exponential_jitter(initial=1, max=2, jitter=0.025)
-_DEFAULT_TIMEOUT_SECONDS = 5
-_FORCED_PROVIDER_TIMEOUT_SECONDS = 10
+_DEFAULT_TIMEOUT_SECONDS = 15
+_FORCED_PROVIDER_TIMEOUT_SECONDS = 30
+_MAX_TIMEOUT_SECONDS = 60
 
 
 _RETRYABLE_PROVIDER_EXCEPTIONS = (
@@ -33,6 +34,7 @@ _RETRYABLE_PROVIDER_EXCEPTIONS = (
     APIError,
     BadGatewayError,
     InternalServerError,
+    JSONSchemaValidationError,
     RateLimitError,
     ServiceUnavailableError,
     Timeout,
@@ -40,7 +42,7 @@ _RETRYABLE_PROVIDER_EXCEPTIONS = (
 
 
 class BaseAdapter:
-    def __init__(self, *, provider_name: str, redis: Redis, request: Any = None):
+    def __init__(self, *, provider_name: str, redis: Redis, request: Any = None, provider_preference: str | None = None):  # fmt: skip
         if not provider_name:
             raise ValueError("provider_name is required")
         if redis is None:
@@ -50,6 +52,7 @@ class BaseAdapter:
         self._models = self._provider_config.get("models", {})
         self.redis = redis
         self.request = request
+        self._forced_provider_preference = provider_preference
         self._completion_model: str | None = self._models.get("completion", None)
         self._embedding_model: str | None = self._models.get("embedding", None)
         self._completion_router = None
@@ -57,6 +60,8 @@ class BaseAdapter:
         self._attempt_number = 0
 
     def _provider_preference(self) -> str | None:
+        if self._forced_provider_preference is not None:
+            return self._forced_provider_preference
         audit_context = getattr(getattr(self.request, "state", None), "audit_context", {})
         request_meta = audit_context.get("request_meta", {})
         return request_meta.get("provider_pref") or None
@@ -70,27 +75,36 @@ class BaseAdapter:
     async def is_circuit_open(self) -> bool:
         return bool(await self.redis.exists(f"circuit:{self._provider_name}:open"))
 
-    async def acompletion(self, *, messages: list[dict[str, Any]], request_params: Mapping[str, Any]) -> Any:
+    async def acompletion(self, *, messages: list[dict[str, Any]], request_params: Mapping[str, Any], response_validator: Any | None = None) -> Any:  # fmt: skip
         if not self._supports_completion():
             raise RuntimeError(f"Provider '{self._provider_name}' does not support completion")
         return await self._execute(
             lambda: self._completion_router.acompletion(
-                model=self._completion_model, messages=messages, **request_params
+                model=self._completion_model,
+                messages=messages,
+                timeout=self._attempt_timeout_seconds(),
+                **request_params,
             ),
             model=self._completion_model,
+            response_validator=response_validator,
         )
 
     async def aembedding(self, *, input_data: str | list[str], request_params: Mapping[str, Any]) -> Any:
         if not self._supports_embedding():
             raise RuntimeError(f"Provider '{self._provider_name}' does not support embedding")
         return await self._execute(
-            lambda: self._embedding_router.aembedding(model=self._embedding_model, input=input_data, **request_params),
+            lambda: self._embedding_router.aembedding(
+                model=self._embedding_model,
+                input=input_data,
+                timeout=self._attempt_timeout_seconds(),
+                **request_params,
+            ),
             model=self._embedding_model,
         )
 
-    async def _execute(self, operation: Any, *, model: str | None) -> Any:
+    async def _execute(self, operation: Any, *, model: str | None, response_validator: Any | None = None) -> Any:
         try:
-            result = await self._call_with_retry(operation, model=model)
+            result = await self._call_with_retry(operation, model=model, response_validator=response_validator)
         except Exception as exc:
             state = getattr(self.request, "state", None)
             request_id = getattr(state, "request_id", None)
@@ -129,7 +143,7 @@ class BaseAdapter:
             logger.info(f"{request_prefix}{provider_phrase} circuit reset after success")
         return result
 
-    async def _call_with_retry(self, operation: Any, *, model: str | None) -> Any:
+    async def _call_with_retry(self, operation: Any, *, model: str | None, response_validator: Any | None = None) -> Any:  # fmt: skip
         retry_config = {
             "stop": stop_after_attempt(3),
             "before": self._before_attempt(),
@@ -140,14 +154,10 @@ class BaseAdapter:
         }
         async for attempt in AsyncRetrying(**retry_config):
             with attempt:
-                try:
-                    return await asyncio.wait_for(operation(), timeout=self._attempt_timeout_seconds())
-                except TimeoutError as exc:
-                    raise Timeout(
-                        message=f"Provider '{self._provider_name}' timed out after {self._attempt_timeout_seconds()} seconds",
-                        model=model or self._provider_name,
-                        llm_provider=self._provider_name,
-                    ) from exc
+                result = await operation()
+                if response_validator is not None:
+                    response_validator(result)
+                return result
 
     def _api_key(self) -> str:
         api_key_env = self._provider_config.get("api_key_env", None)
@@ -192,7 +202,25 @@ class BaseAdapter:
                     pass
         return _DEFAULT_RETRY_WAIT(retry_state)
 
+    def _timeout_override_seconds(self) -> int | None:
+        headers = getattr(self.request, "headers", None)
+        if headers is None:
+            return None
+        timeout_value = headers.get("X-LLM-Timeout")
+        if timeout_value is None:
+            return None
+        try:
+            timeout_seconds = int(float(timeout_value))
+        except (TypeError, ValueError):
+            return None
+        if timeout_seconds <= 0:
+            return None
+        return min(timeout_seconds, _MAX_TIMEOUT_SECONDS)
+
     def _attempt_timeout_seconds(self) -> int:
+        timeout_override = self._timeout_override_seconds()
+        if timeout_override is not None:
+            return timeout_override
         if self._provider_preference() is not None:
             return _FORCED_PROVIDER_TIMEOUT_SECONDS
         return _DEFAULT_TIMEOUT_SECONDS
