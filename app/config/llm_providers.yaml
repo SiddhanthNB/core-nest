@@ -5,6 +5,7 @@ providers:
     models:
       completion: groq/openai/gpt-oss-20b
   cerebras:
+    enabled: false
     api_key_env: CEREBRAS_API_KEY
     provider: cerebras
     models:
@@ -30,7 +31,7 @@ providers:
     api_key_env: OPENROUTER_API_KEY
     provider: openrouter
     models:
-      completion: openrouter/liquid/lfm-2.5-1.2b-instruct:free
+      completion: openrouter/z-ai/glm-5.2:free
       embedding: openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free
   openai:
     enabled: false
