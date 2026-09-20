@@ -3,12 +3,12 @@ providers:
     api_key_env: GROQ_API_KEY
     provider: groq
     models:
-      completion: groq/llama-3.1-8b-instant
+      completion: groq/openai/gpt-oss-20b
   cerebras:
     api_key_env: CEREBRAS_API_KEY
     provider: cerebras
     models:
-      completion: cerebras/llama3.1-8b
+      completion: cerebras/qwen-3.8-27b
   google:
     api_key_env: GOOGLE_API_KEY
     provider: google
@@ -30,7 +30,7 @@ providers:
     api_key_env: OPENROUTER_API_KEY
     provider: openrouter
     models:
-      completion: openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+      completion: openrouter/liquid/lfm-2.5-1.2b-instruct:free
       embedding: openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free
   openai:
     enabled: false
