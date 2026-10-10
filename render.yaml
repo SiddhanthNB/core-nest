@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: core-nest
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: uv sync --locked --no-dev
+    startCommand: uv run --no-dev main.py
+    healthCheckPath: /ping
+    # deploys only via the tag-triggered CI/CD workflow (.github/workflows/ci-cd.yml)
+    autoDeployTrigger: "off"
+    envVars:
+      - key: APP_ENV
+        value: production
+      # free plan has 512 MB; each worker loads litellm
+      - key: WEB_CONCURRENCY
+        value: 1
+      - key: LITELLM_LOCAL_MODEL_COST_MAP
+        value: "True"
+      # secrets: values live in the Render dashboard, never in git
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: SUPABASE_DB_PASSWORD
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
