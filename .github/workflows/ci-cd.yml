@@ -1,0 +1,50 @@
+name: CI/CD
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # dummy values so app config imports; tests never connect to these
+      APP_ENV: development
+      SUPABASE_DB_URL: "postgresql+psycopg://postgres:[YOUR-PASSWORD]@127.0.0.1:5432/postgres"
+      SUPABASE_DB_PASSWORD: ci-dummy
+      REDIS_URL: "redis://:[YOUR-PASSWORD]@127.0.0.1:6379/0"
+      REDIS_PASSWORD: ci-dummy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test
+        run: uv run pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy of the tagged commit
+        # runtime env vars (APP_ENV, DB, Redis, provider keys, etc.) are injected on the Render platform, not here
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&ref=${GITHUB_SHA}"
