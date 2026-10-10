@@ -8,6 +8,7 @@ import httpx
 import litellm
 import pytest
 import respx
+from fastapi import HTTPException
 from litellm import AuthenticationError, BadRequestError
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -158,6 +159,19 @@ async def test_service_falls_back_to_next_provider_on_5xx(mocker, redis, provide
     assert attempts[0]["error"] == "ServiceUnavailableError"
     assert await redis.get("circuit:groq:failures") == "1"
     assert not await redis.exists("circuit:mistral:failures")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider_status, provider_headers, expected_status, expected_retry_after", [(429, {"Retry-After": "7"}, 429, "7"), (429, {}, 429, None), (503, {}, 503, None)])  # fmt: skip
+async def test_requested_provider_failure_maps_to_client_status(mocker, redis, provider_api, sleeps, provider_status, provider_headers, expected_status, expected_retry_after) -> None:  # fmt: skip
+    mocker.patch("app.api.services.base.redis_client", redis)
+    provider_api.post(_GROQ_URL).mock(return_value=httpx.Response(provider_status, headers=provider_headers, json=_error_body("busy")))  # fmt: skip
+
+    with pytest.raises(HTTPException) as raised:
+        await BaseService()._fetch_completion(messages=_MESSAGES, request_params={}, provider_preference="groq", request=_request())  # fmt: skip
+
+    assert raised.value.status_code == expected_status
+    assert (raised.value.headers or {}).get("Retry-After") == expected_retry_after
 
 
 @pytest.mark.asyncio

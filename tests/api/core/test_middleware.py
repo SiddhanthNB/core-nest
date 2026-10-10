@@ -239,3 +239,25 @@ async def test_ping_logs_only_at_debug(caplog, level, expected) -> None:
 
     assert response.status_code == 200
     assert [record.getMessage() for record in caplog.records if "Request started" in record.getMessage() or "/ping" in record.getMessage()] == expected  # fmt: skip
+
+
+@pytest.mark.asyncio
+async def test_http_exception_headers_reach_client() -> None:
+    from fastapi import HTTPException
+    from httpx import ASGITransport, AsyncClient
+
+    from app.api.core._helpers import register_exception_handlers
+
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/limited")
+    async def _limited():
+        raise HTTPException(status_code=429, detail="Too many requests", headers={"Retry-After": "30"})
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.get("/limited")
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "30"
+    assert response.json()["error"]["message"] == "Too many requests"

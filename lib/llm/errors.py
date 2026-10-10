@@ -37,3 +37,9 @@ def short_error(exc: Exception) -> str:
     if status_code:
         return f"{type(exc).__name__} {status_code}: {reason}"
     return f"{type(exc).__name__}: {reason}"
+
+
+def retry_after(exc: Exception) -> str | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(exc, "litellm_response_headers", None) or getattr(response, "headers", None)
+    return (headers.get("Retry-After") or headers.get("retry-after")) if headers else None

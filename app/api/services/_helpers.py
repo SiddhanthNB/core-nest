@@ -8,11 +8,12 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from fastapi.encoders import jsonable_encoder
-from litellm import JSONSchemaValidationError, UnsupportedParamsError, get_supported_openai_params
+from litellm import JSONSchemaValidationError, RateLimitError, UnsupportedParamsError, get_supported_openai_params
 from redis.exceptions import RedisError
 
 from app.config import constants
 from app.config.logger import logger
+from lib.llm.errors import retry_after
 
 _COMPLETION_ROUND_ROBIN_KEY_PREFIX = "llm:routing:completion:rr_counter"
 _COMPLETION_ROUND_ROBIN_TTL_SECONDS = 36 * 60 * 60
@@ -90,6 +91,13 @@ def _litellm_request_error(exc: Exception, *, provider: str, model: str, request
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
     status_code = int(getattr(exc, "status_code", status.HTTP_400_BAD_REQUEST) or status.HTTP_400_BAD_REQUEST)
     return HTTPException(status_code=status_code, detail=str(exc))
+
+
+def _provider_failed_error(exc: Exception, *, provider: str) -> HTTPException:
+    if isinstance(exc, RateLimitError):
+        headers = {"Retry-After": value} if (value := retry_after(exc)) else None
+        return HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Provider '{provider}' is rate limited", headers=headers)  # fmt: skip
+    return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Provider '{provider}' failed")
 
 
 async def _ordered_completion_providers(provider_preference: str | None, *, redis_client: Any, request: Any = None) -> list[str]:  # fmt: skip

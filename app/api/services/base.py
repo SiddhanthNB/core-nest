@@ -27,6 +27,7 @@ from ._helpers import (
     _ordered_completion_providers,
     _payload_mapping,
     _provider_attempts,
+    _provider_failed_error,
     _remaining_seconds,
     _response_meta,
     _set_response_meta,
@@ -193,10 +194,7 @@ class BaseService:
                                 model=model,
                                 request_type="chat_completion",
                             ) from exc
-                        raise HTTPException(
-                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail=f"Provider '{resolved_provider}' failed",
-                        ) from exc
+                        raise _provider_failed_error(exc, provider=resolved_provider) from exc
                     next_provider = providers[index + 1] if index + 1 < len(providers) else None
                     if next_provider:
                         logger.debug(
@@ -305,10 +303,7 @@ class BaseService:
                         model=adapter._embedding_model,
                         request_type="embeddings",
                     ) from exc
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"Provider '{resolved_provider}' failed",
-                ) from exc
+                raise _provider_failed_error(exc, provider=resolved_provider) from exc
 
             payload = _payload_mapping(payload)
             provider_attempts.append(

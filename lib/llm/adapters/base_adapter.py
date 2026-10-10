@@ -25,7 +25,7 @@ from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt,
 from app.config import constants
 from app.config.logger import logger
 from app.config.tracing import tracer
-from lib.llm.errors import short_error
+from lib.llm.errors import retry_after, short_error
 
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_COOLDOWN_SECONDS = 60
@@ -211,16 +211,10 @@ class BaseAdapter:
 
     def _retry_wait_seconds(self, retry_state: Any) -> float:
         exc = retry_state.outcome.exception() if retry_state.outcome else None
-        if exc is not None:
-            response = getattr(exc, "response", None)
-            headers = getattr(exc, "litellm_response_headers", None) or getattr(response, "headers", None)
-            retry_after = (headers.get("Retry-After") or headers.get("retry-after")) if headers else None
-            if retry_after is not None:
-                try:
-                    return max(0.0, min(float(retry_after), _MAX_RETRY_AFTER_SECONDS))
-                except (TypeError, ValueError):
-                    pass
-        return _DEFAULT_RETRY_WAIT(retry_state)
+        try:
+            return max(0.0, min(float(retry_after(exc)), _MAX_RETRY_AFTER_SECONDS))
+        except (TypeError, ValueError):
+            return _DEFAULT_RETRY_WAIT(retry_state)
 
     def _remaining_seconds(self) -> float | None:
         deadline = getattr(getattr(self.request, "state", None), "llm_deadline", None)

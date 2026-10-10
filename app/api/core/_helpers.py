@@ -134,7 +134,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _handle_http_exception(_: Request, exc: HTTPException) -> JSONResponse:
         detail = exc.detail
         if isinstance(detail, dict) and "error" in detail:
-            return JSONResponse(content=detail, status_code=exc.status_code)
+            return JSONResponse(content=detail, status_code=exc.status_code, headers=exc.headers)
 
         if isinstance(detail, dict):
             message = str(detail.get("detail") or detail.get("message") or "Request failed")
@@ -154,6 +154,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             content=_openai_error(message, type_=error_type, param=param, code=code),
             status_code=exc.status_code,
+            headers=exc.headers,
         )
 
     @app.exception_handler(Exception)
