@@ -79,4 +79,4 @@ def configure_tracing() -> None:
 
 def instrument_app(app: FastAPI) -> None:
     configure_tracing()
-    FastAPIInstrumentor.instrument_app(app, exclude_spans=["receive", "send"])
+    FastAPIInstrumentor.instrument_app(app, excluded_urls="/ping$", exclude_spans=["receive", "send"])

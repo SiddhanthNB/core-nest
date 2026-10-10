@@ -215,3 +215,37 @@ async def test_cors_exposes_request_id_header() -> None:
 
     assert response.headers["access-control-expose-headers"] == "X-Request-ID"
     assert response.headers["X-Request-ID"]
+
+
+@pytest.mark.asyncio
+async def test_ping_is_not_logged_but_other_paths_are(caplog) -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.api.core.middleware import register_middleware
+    from app.config.tracing import instrument_app
+
+    app = FastAPI()
+    register_middleware(app)
+    instrument_app(app)
+
+    @app.get("/ping")
+    async def _ping():
+        return "pong"
+
+    @app.get("/other")
+    async def _other():
+        return {"ok": True}
+
+    caplog.set_level("DEBUG", logger="core-nest")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        ping = await client.get("/ping")
+        ping_messages = [record.getMessage() for record in caplog.records]
+        caplog.clear()
+        await client.get("/other")
+        other_messages = [record.getMessage() for record in caplog.records]
+
+    assert ping.status_code == 200
+    assert ping.headers["X-Request-ID"]
+    assert not any("/ping" in message or "Request" in message for message in ping_messages)
+    assert any("Request started" in message for message in other_messages)
+    assert any("[name: GET /other]" in message for message in other_messages)
