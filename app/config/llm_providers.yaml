@@ -23,6 +23,7 @@ providers:
       completion: mistral/ministral-8b-2410
       embedding: mistral/mistral-embed
   huggingface:
+    enabled: false
     api_key_env: HUGGINGFACE_API_KEY
     provider: huggingface
     models:
@@ -31,7 +32,7 @@ providers:
     api_key_env: OPENROUTER_API_KEY
     provider: openrouter
     models:
-      completion: openrouter/qwen/qwen3.8-27b:free
+      completion: openrouter/google/gemma-4-31b-it:free
       embedding: openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free
   openai:
     enabled: false

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import time
 from typing import Any
 
@@ -7,19 +9,66 @@ from app.config import constants
 from app.config.redis import redis_client
 from lib.llm.adapters import get_adapter
 
+_MAX_REASON_LENGTH = 160
+_USER_ID_PATTERN = re.compile(r',?\s*"user_id"\s*:\s*"[^"]*"')
 
-def _failure_result(provider: str, started: float, exc: Exception) -> dict[str, Any]:
+
+def _model_for(provider: str, kind: str) -> str | None:
+    return constants.PROVIDERS.get(provider, {}).get("models", {}).get(kind)
+
+
+def _attempts_for(adapter: Any) -> int:
+    return int(getattr(adapter, "_attempt_number", 0) or 0)
+
+
+def _provider_error_message(text: str) -> str | None:
+    start = text.find("{")
+    if start == -1:
+        return None
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(text[start:])
+    except ValueError:
+        return None
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, str):
+        return error
+    if not isinstance(error, dict):
+        return None
+    message = error.get("message")
+    raw = (error.get("metadata") or {}).get("raw")
+    if isinstance(raw, str) and (not message or message == "Provider returned error"):
+        return raw
+    return message if isinstance(message, str) else None
+
+
+def _short_error(exc: Exception) -> str:
+    text = _USER_ID_PATTERN.sub("", str(exc))
+    reason = _provider_error_message(text) or text
+    reason = " ".join(reason.split())
+    if len(reason) > _MAX_REASON_LENGTH:
+        reason = reason[: _MAX_REASON_LENGTH - 3] + "..."
+    status_code = getattr(exc, "status_code", None)
+    if status_code:
+        return f"{type(exc).__name__} {status_code}: {reason}"
+    return f"{type(exc).__name__}: {reason}"
+
+
+def _failure_result(provider: str, started: float, exc: Exception, *, model: str | None = None, attempts: int = 0) -> dict[str, Any]:  # fmt: skip
     latency_ms = int((time.perf_counter() - started) * 1000)
     return {
         "provider": provider,
         "status": "failure",
         "latency_ms": latency_ms,
-        "error": f"{type(exc).__name__}: {exc}",
+        "model": model,
+        "attempts": attempts,
+        "error": _short_error(exc),
     }
 
 
 async def _check_completion(provider: str) -> dict[str, Any]:
     started = time.perf_counter()
+    model = _model_for(provider, "completion")
+    adapter = None
     try:
         adapter = get_adapter(provider, redis=redis_client)
         result = await adapter.acompletion(
@@ -34,14 +83,18 @@ async def _check_completion(provider: str) -> dict[str, Any]:
             "provider": provider,
             "status": "success",
             "latency_ms": latency_ms,
+            "model": model,
+            "attempts": _attempts_for(adapter),
             "result": result.model_dump(exclude_none=True) if hasattr(result, "model_dump") else result,
         }
     except Exception as exc:
-        return _failure_result(provider, started, exc)
+        return _failure_result(provider, started, exc, model=model, attempts=_attempts_for(adapter))
 
 
 async def _check_embedding(provider: str) -> dict[str, Any]:
     started = time.perf_counter()
+    model = _model_for(provider, "embedding")
+    adapter = None
     try:
         adapter = get_adapter(provider, redis=redis_client)
         await adapter.aembedding(input_data=["ping", "pong"], request_params={})
@@ -50,9 +103,30 @@ async def _check_embedding(provider: str) -> dict[str, Any]:
             "provider": provider,
             "status": "success",
             "latency_ms": latency_ms,
+            "model": model,
+            "attempts": _attempts_for(adapter),
         }
     except Exception as exc:
-        return _failure_result(provider, started, exc)
+        return _failure_result(provider, started, exc, model=model, attempts=_attempts_for(adapter))
+
+
+def _format_latency(latency_ms: int) -> str:
+    if latency_ms >= 1000:
+        return f"{latency_ms / 1000:.1f}s"
+    return f"{latency_ms}ms"
+
+
+def _format_details(item: dict[str, Any]) -> str:
+    if item["status"] == "success":
+        parts = ["ok", _format_latency(item.get("latency_ms", 0))]
+    else:
+        parts = [item.get("error", "unknown error")]
+    if item.get("model"):
+        parts.append(f"`{item['model']}`")
+    attempts = item.get("attempts", 0)
+    if attempts:
+        parts.append(f"{attempts} attempt{'s' if attempts != 1 else ''}")
+    return " · ".join(parts).replace("|", "\\|")
 
 
 def _format_section(title: str, results: list[dict[str, Any]]) -> list[str]:
@@ -64,12 +138,7 @@ def _format_section(title: str, results: list[dict[str, Any]]) -> list[str]:
     lines.append("| --- | --- | --- |")
     for item in results:
         status_icon = "Success" if item["status"] == "success" else "Failure"
-        if item["status"] == "success":
-            details = "ok"
-        else:
-            raw = item.get("error", "unknown error")
-            details = raw.replace("\n", " ").replace("\r", " ")
-        lines.append(f"| {item['provider']} | {status_icon} | {details} |")
+        lines.append(f"| {item['provider']} | {status_icon} | {_format_details(item)} |")
     lines.append("")
     return lines
 
