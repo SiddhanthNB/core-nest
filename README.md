@@ -299,7 +299,7 @@ uv run invoke daily-tasks.cleanup-audit-logs --retention-days 60
 uv run invoke dev-tasks.lint
 ```
 
-The health check writes Markdown to `GITHUB_STEP_SUMMARY` when set, and runs daily via GitHub Actions.
+The health check writes Markdown to `GITHUB_STEP_SUMMARY` when set, and can be run manually from GitHub Actions.
 
 ## Deployment
 
