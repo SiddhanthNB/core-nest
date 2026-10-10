@@ -25,6 +25,7 @@ from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt,
 from app.config import constants
 from app.config.logger import logger
 from app.config.tracing import tracer
+from lib.llm.errors import short_error
 
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_COOLDOWN_SECONDS = 60
@@ -134,11 +135,6 @@ class BaseAdapter:
         try:
             result = await self._call_with_retry(operation, model=model, response_validator=response_validator)
         except Exception as exc:
-            if isinstance(exc, _RETRYABLE_PROVIDER_EXCEPTIONS) and self._attempt_number:
-                logger.warning(
-                    f"[attempt: {self._attempt_number}] {self._provider_label()} attempts exhausted "
-                    f"after {type(exc).__name__}"
-                )
             opened = await self._record_failure() if isinstance(exc, _CIRCUIT_FAILURE_EXCEPTIONS) else False
             if opened:
                 logger.warning(f"{self._provider_label()} circuit opened after repeated failures")
@@ -165,7 +161,7 @@ class BaseAdapter:
                     if response_validator is not None:
                         response_validator(result)
                 except Exception as exc:
-                    logger.warning(f"[attempt: {attempt_number}] {self._provider_label()} attempt failed with {type(exc).__name__}")  # fmt: skip
+                    logger.warning(f"[attempt: {attempt_number}] {self._provider_label()} attempt failed: {short_error(exc)}")  # fmt: skip
                     span.set_attribute("outcome", "failed")
                     span.set_attribute("error.type", type(exc).__name__)
                     span.set_status(StatusCode.ERROR)

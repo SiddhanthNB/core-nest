@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
 import time
 from typing import Any
 
@@ -9,9 +7,7 @@ from app.config import constants
 from app.config.redis import redis_client
 from app.config.tracing import tracer
 from lib.llm.adapters import get_adapter
-
-_MAX_REASON_LENGTH = 160
-_USER_ID_PATTERN = re.compile(r',?\s*"user_id"\s*:\s*"[^"]*"')
+from lib.llm.errors import short_error
 
 
 def _model_for(provider: str, kind: str) -> str | None:
@@ -22,38 +18,6 @@ def _attempts_for(adapter: Any) -> int:
     return int(getattr(adapter, "_attempt_number", 0) or 0)
 
 
-def _provider_error_message(text: str) -> str | None:
-    start = text.find("{")
-    if start == -1:
-        return None
-    try:
-        payload, _ = json.JSONDecoder().raw_decode(text[start:])
-    except ValueError:
-        return None
-    error = payload.get("error") if isinstance(payload, dict) else None
-    if isinstance(error, str):
-        return error
-    if not isinstance(error, dict):
-        return None
-    message = error.get("message")
-    raw = (error.get("metadata") or {}).get("raw")
-    if isinstance(raw, str) and (not message or message == "Provider returned error"):
-        return raw
-    return message if isinstance(message, str) else None
-
-
-def _short_error(exc: Exception) -> str:
-    text = _USER_ID_PATTERN.sub("", str(exc))
-    reason = _provider_error_message(text) or text
-    reason = " ".join(reason.split())
-    if len(reason) > _MAX_REASON_LENGTH:
-        reason = reason[: _MAX_REASON_LENGTH - 3] + "..."
-    status_code = getattr(exc, "status_code", None)
-    if status_code:
-        return f"{type(exc).__name__} {status_code}: {reason}"
-    return f"{type(exc).__name__}: {reason}"
-
-
 def _failure_result(provider: str, started: float, exc: Exception, *, model: str | None = None, attempts: int = 0) -> dict[str, Any]:  # fmt: skip
     latency_ms = int((time.perf_counter() - started) * 1000)
     return {
@@ -62,7 +26,7 @@ def _failure_result(provider: str, started: float, exc: Exception, *, model: str
         "latency_ms": latency_ms,
         "model": model,
         "attempts": attempts,
-        "error": _short_error(exc),
+        "error": short_error(exc),
     }
 
 

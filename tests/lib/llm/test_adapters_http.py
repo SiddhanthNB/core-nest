@@ -128,6 +128,18 @@ async def test_adapter_400_does_not_retry_or_open_circuit(redis, provider_api, s
 
 
 @pytest.mark.asyncio
+async def test_adapter_attempt_warning_includes_provider_message(redis, provider_api, sleeps, caplog) -> None:
+    provider_api.post(_GROQ_URL).mock(return_value=httpx.Response(400, json=_error_body("Failed to generate JSON")))
+    adapter = get_adapter("groq", redis=redis, request=_request())
+
+    with pytest.raises(BadRequestError):
+        await adapter.acompletion(messages=_MESSAGES, request_params={})
+
+    warnings = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert warnings == ["[attempt: 1] provider 'groq' attempt failed: BadRequestError 400: Failed to generate JSON"]
+
+
+@pytest.mark.asyncio
 async def test_service_falls_back_to_next_provider_on_5xx(mocker, redis, provider_api, sleeps) -> None:
     mocker.patch("app.api.services.base.redis_client", redis)
     mocker.patch("app.api.services._helpers.constants.COMPLETION_PROVIDERS", ("groq", "mistral"))
