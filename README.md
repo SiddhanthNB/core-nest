@@ -306,7 +306,7 @@ The health check writes Markdown to `GITHUB_STEP_SUMMARY` when set, and can be r
 Deploys are triggered by pushing a version tag:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
 The [CI/CD workflow](https://github.com/SiddhanthNB/core-nest/blob/main/.github/workflows/ci-cd.yml) runs ruff and pytest on the tagged commit, then calls the Render deploy hook for that exact commit.

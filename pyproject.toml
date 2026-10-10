@@ -1,6 +1,6 @@
 [project]
 name = "core-nest"
-version = "0.1.0"
+version = "1.0.0"
 description = "FastAPI LLM gateway with LiteLLM provider routing, Redis-backed circuit breaking, and Duo ORM persistence."
 readme = "README.md"
 requires-python = ">=3.12"
