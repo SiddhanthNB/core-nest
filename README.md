@@ -6,7 +6,7 @@ CoreNest is an OpenAI-compatible LLM gateway that sits in front of multiple prov
 It gives you:
 
 - one client-facing contract
-- app-owned routing and fallback
+- app-owned routing, retries and fallback
 - a few opinionated endpoints for common tasks
 
 ## Why CoreNest
@@ -22,10 +22,10 @@ CoreNest gives you a cleaner shape:
 
 - OpenAI-compatible request and response contracts
 - provider abstraction via LiteLLM
-- app-owned fallback and circuit-breaker behavior
+- app-owned retries, fallback and circuit breaking
 - stable `core-nest/*` model aliases
 - explicit provider enablement
-- request-level provider traceability via response headers
+- per-request traceability via response headers and trace-aware logs
 
 ## Quick Start
 
@@ -44,25 +44,21 @@ Public routes:
 - `/beta/sentiments`
 - `/beta/summaries`
 
-Public model aliases:
+Model aliases: `core-nest/auto` plus one `core-nest/<provider>` per enabled provider in [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml). Currently:
 
 - `core-nest/auto`
 - `core-nest/google`
 - `core-nest/groq`
-- `core-nest/cerebras`
 - `core-nest/mistral`
-- `core-nest/huggingface`
 - `core-nest/openrouter`
 
-`core-nest/auto` is only valid for chat-style endpoints. It enables CoreNest-owned provider routing and fallback.
+`core-nest/auto` is only valid for chat-style endpoints.
 
 ## Consumer Quickstart
 
 ### Completions
 
 `POST /v1/chat/completions`
-
-Use this when you want an OpenAI-compatible chat/completions endpoint that can power agentic workflows while keeping provider routing under CoreNest control.
 
 ```bash
 curl -X POST http://localhost:3000/v1/chat/completions \
@@ -80,18 +76,13 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 
 Behavior:
 
-- user supplies `messages`
-- request shape is OpenAI-compatible
-- caller supplies a CoreNest model alias via `model`
-- `core-nest/auto` enables CoreNest-owned provider routing and fallback
-- `core-nest/<provider>` locks execution to a specific provider
-- `stream=false` is accepted, but streaming is not supported
+- `core-nest/auto` enables CoreNest-owned routing and fallback
+- `core-nest/<provider>` locks execution to one provider
+- `stream=false` is accepted; streaming is not supported
 
 ### Embeddings
 
 `POST /v1/embeddings`
-
-Use this when you want an OpenAI-compatible embeddings endpoint without cross-provider fallback.
 
 ```bash
 curl -X POST http://localhost:3000/v1/embeddings \
@@ -105,15 +96,12 @@ curl -X POST http://localhost:3000/v1/embeddings \
 
 Behavior:
 
-- caller must choose a provider-specific CoreNest model alias
-- no cross-provider fallback is used
-- `core-nest/auto` is not valid for embeddings
+- caller must choose a provider-specific alias
+- no cross-provider fallback; `core-nest/auto` is not valid
 
 ### Sentiments
 
 `POST /beta/sentiments`
-
-Use this when you want structured sentiment output without letting callers control the system prompt or execution policy.
 
 ```bash
 curl -X POST http://localhost:3000/beta/sentiments \
@@ -129,17 +117,13 @@ curl -X POST http://localhost:3000/beta/sentiments \
 
 Behavior:
 
-- caller must not send `system` messages
-- CoreNest injects the system prompt
-- response format is app-owned JSON
-- execution policy fields are locked by the application
-- provider routing follows the same model-alias rules as chat completions
+- no `system` messages; CoreNest injects the system prompt
+- response is app-owned JSON; execution policy is locked
+- routing follows chat completion rules
 
 ### Summaries
 
 `POST /beta/summaries`
-
-Use this when you want an opinionated summarization endpoint with an app-controlled prompt and execution policy.
 
 ```bash
 curl -X POST http://localhost:3000/beta/summaries \
@@ -155,125 +139,105 @@ curl -X POST http://localhost:3000/beta/summaries \
 
 Behavior:
 
-- caller must not send `system` messages
-- CoreNest injects the system prompt
-- provider selection follows completion routing rules
-- summaries are plain-text oriented; JSON output is not app-supported here
+- no `system` messages; CoreNest injects the system prompt
+- plain-text output; JSON is not supported here
+- routing follows chat completion rules
 
 ## Response Contract
 
-Successful responses are returned without a custom success envelope.
+Successful responses are returned without a custom envelope: OpenAI-compatible completion and embedding payloads. The body keeps the alias the client requested.
 
-That means:
-
-- `/v1/chat/completions` returns an OpenAI-compatible completion payload
-- `/v1/embeddings` returns an OpenAI-compatible embedding payload
-- opinionated endpoints return the same payload family while preserving their app-owned execution rules
-
-The response body keeps the public CoreNest model alias the client requested. CoreNest also includes a response header that tells the caller what actually served the request:
+Response headers:
 
 ```http
+X-Request-ID: 7a9f3162-b8f5-6540-682a-4ba1fe4e02ff
 X-LLM-Backend: mistral:mistral/ministral-8b-2410
 ```
 
-This matters when fallback is enabled and the final provider may vary from one request to the next.
+- `X-Request-ID` is on every response; it is the request's trace id and matches the server logs and audit row
+- `X-LLM-Backend` shows which provider actually served the request
 
 ## Routing and Fallback
 
 Chat-style routes (`/v1/chat/completions`, `/beta/sentiments`, `/beta/summaries`) use application-owned routing.
 
-Current behavior:
+With `model=core-nest/auto`:
 
-- enabled providers are derived from [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml)
-- provider order follows declaration order in that config
-- when `model=core-nest/auto`, CoreNest rotates the starting provider via Redis-backed round robin
-- fallback proceeds through the remaining providers
-- open-circuit providers are skipped
+- enabled providers come from [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml), in declaration order
+- the starting provider rotates via Redis-backed round robin
+- fallback proceeds through the remaining providers; open-circuit providers are skipped
 
-If `model=core-nest/<provider>` is used:
+With `model=core-nest/<provider>`:
 
-- only that provider is eligible
-- no cross-provider fallback is used
-- provider errors are returned directly through CoreNest’s API error mapping
+- only that provider is eligible; no fallback
+- provider errors are returned through CoreNest's API error mapping
+- an open circuit returns `503`
 
-Embeddings are stricter:
+## Reliability
 
-- caller must choose a provider-specific model alias
-- no cross-provider fallback is allowed
+- each provider gets up to 3 attempts with exponential backoff; `Retry-After` is honored, capped at 10s
+- client errors (4xx) are never retried
+- circuit breaker: 3 provider failures within 10 minutes open the circuit for 60s (Redis-backed); auth failures count, client errors don't
+- every request has a hard 90s deadline across all providers and retries; exceeding it returns `504`
+- `X-LLM-Timeout` (seconds, max 60) overrides the per-attempt timeout
 
 ## Request Validation
 
-CoreNest validates the public API contract at the edge.
+CoreNest validates the public contract at the edge: required fields, blocked app-managed params, message restrictions, and locked execution policy.
 
-That means it owns:
+LiteLLM handles provider-specific support at runtime:
 
-- required fields
-- blocked app-managed params
-- message restrictions on opinionated endpoints
-- endpoint-specific locked execution policy
-
-LiteLLM then handles provider-specific request support at runtime.
-
-Examples:
-
-- unsupported provider-specific params become runtime provider errors
-- invalid JSON from a provider is treated as provider failure when JSON is required
-- `/beta/sentiments` always expects valid JSON output
-- `/beta/summaries` does not support JSON output as an app-level contract
-- `/v1/chat/completions` accepts common OpenAI client fields like `stream=false`, but rejects unsupported active behavior like `stream=true`
+- params a provider doesn't support are dropped instead of erroring
+- invalid JSON is treated as provider failure when JSON is required
+- `stream=true` is rejected
 
 ## OpenAI Compatibility
 
-CoreNest is designed to be OpenAI-compatible enough to power agentic workflows, not to be a full OpenAI feature clone.
+CoreNest is OpenAI-compatible enough to power agentic workflows, not a full OpenAI clone.
 
-That means:
-
-- standard bearer-token auth works with OpenAI-style clients
-- `/v1/chat/completions` and `/v1/embeddings` follow an OpenAI-compatible HTTP surface
-- request and response bodies are compatible enough for non-streaming SDK workflows
-- error responses use an OpenAI-style error envelope
+- bearer-token auth works with OpenAI-style clients
+- non-streaming SDK workflows work
+- errors use an OpenAI-style error envelope
 
 Intentional differences:
 
-- `model` is a CoreNest alias such as `core-nest/auto` or `core-nest/google`
+- `model` is a CoreNest alias
 - streaming is not supported
-- provider switching, circuit breaking, and fallback remain CoreNest-owned behavior
-- beta endpoints stay opinionated even though they use the same general payload family
+- routing, retries and fallback stay CoreNest-owned
+- beta endpoints stay opinionated
 
 ## Auth, Rate Limits, and Audit
 
-CoreNest includes request-level controls:
-
-- bearer-token client auth
-- Redis-backed client caching
-- Redis-backed rate limiting
+- bearer-token client auth (keys stored hashed, cached in Redis for 5 minutes)
+- Redis-backed rate limiting (per minute, hour, day, and concurrent)
 - Redis-backed provider circuit state
-- Postgres audit logging
+- Postgres audit logging, including provider attempt stacks; skipped in development
 
-Audit logging records request/response metadata, including provider attempt stacks. In development mode, audit persistence is skipped.
+## Observability
+
+Logs are flat, single-line text to stdout and `logs/core-nest.<date>.log` (rotated daily, 7 days kept).
+
+Every line carries OpenTelemetry trace and span ids:
+
+```
+[2026-10-10 14:34:18] [INFO] [core-nest] [pid: 146453] [trace: 7a9f…] [span: 6075…] : [name: attempt 1 groq] [parent: 0d53…] [duration_ms: 812.4] [status: OK] Span ended
+```
+
+- one span per request, per provider, and per retry attempt; each logs one line when it ends
+- Redis and DB spans log at `DEBUG`; request and provider spans at `INFO`
+- no exporter; spans only exist as log lines
+- incoming `traceparent` headers are ignored; every request starts a new trace
 
 ## Configuration
 
-Main config:
+- [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml): provider identity, enablement, API key env names, model IDs
+- [api_managed_params.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/api_managed_params.yaml): endpoint-owned params and defaults
 
-- [llm_providers.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/llm_providers.yaml)
-  - provider identity
-  - provider enablement
-  - API key env variable names
-  - default model IDs
-- [api_managed_params.yaml](https://github.com/SiddhanthNB/core-nest/blob/main/app/config/api_managed_params.yaml)
-  - endpoint-owned params and defaults
-
-Model IDs are stored explicitly. CoreNest does not auto-prefix provider model names dynamically.
+Model IDs are stored explicitly; CoreNest does not auto-prefix them. Provider-specific quirks live in the provider's adapter under `lib/llm/adapters/`.
 
 ## Local Setup
 
-Prereqs:
-
-- Python 3.12+
-- Postgres
-- Redis
-- provider API keys for the providers you enable
+Prereqs: Python 3.12+, Postgres, Redis, and API keys for the providers you enable.
 
 ```bash
 cp .env.sample .env
@@ -281,13 +245,11 @@ uv sync
 uv run main.py
 ```
 
-Before the server starts, CoreNest checks for pending migrations. If the database revision is behind the repo head, startup fails immediately.
+Startup fails immediately if database migrations are pending.
 
 ## Environment
 
-Runtime settings come from `.env`.
-
-Base variables:
+Runtime settings come from `.env`:
 
 ```bash
 APP_ENV=development
@@ -299,6 +261,9 @@ SUPABASE_DB_URL=postgresql://user:[YOUR-PASSWORD]@host:5432/db
 
 REDIS_PASSWORD=replace-me
 REDIS_URL=redis://default:[YOUR-PASSWORD]@host:6379/0
+
+# defaults to True: use LiteLLM's bundled model cost map, no network fetch at startup
+LITELLM_LOCAL_MODEL_COST_MAP=True
 ```
 
 Provider keys are only required for enabled providers:
@@ -315,64 +280,46 @@ CEREBRAS_API_KEY=
 
 ## Database and Migrations
 
-CoreNest uses [Duo ORM](https://github.com/SiddhanthNB/duo-orm) as the database foundation while preserving Alembic migration history.
-
-Common commands:
+CoreNest uses [Duo ORM](https://github.com/SiddhanthNB/duo-orm) while preserving Alembic migration history.
 
 ```bash
 uv run duo-orm migration.history
 uv run duo-orm migration.upgrade
 uv run duo-orm migration.downgrade
-```
-
-Verification:
-
-```bash
 uv run duo-orm migration.current
 uv run duo-orm migration.check
 ```
 
 ## Operational Tasks
 
-Create a client:
-
 ```bash
 uv run invoke one-time-tasks.create-client --name "Acme Corp"
-```
-
-Run provider health checks:
-
-```bash
 uv run invoke daily-tasks.provider-health-check
-```
-
-This writes Markdown to `GITHUB_STEP_SUMMARY` when that environment variable is present.
-
-Clean up old audit rows:
-
-```bash
 uv run invoke daily-tasks.cleanup-audit-logs --retention-days 60
-```
-
-Lint the repo:
-
-```bash
 uv run invoke dev-tasks.lint
 ```
 
-## Tests
+The health check writes Markdown to `GITHUB_STEP_SUMMARY` when set, and runs daily via GitHub Actions.
 
-Run the test suite with:
+## Deployment
+
+Deploys are triggered by pushing a version tag:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The [CI/CD workflow](https://github.com/SiddhanthNB/core-nest/blob/main/.github/workflows/ci-cd.yml) runs ruff and pytest on the tagged commit, then calls the Render deploy hook for that exact commit.
+
+- requires the `RENDER_DEPLOY_HOOK_URL` repository secret
+- runtime env vars are set on Render, not in the workflow
+- Render build command: `uv sync --locked --no-dev`
+- run pending migrations before tagging a release that includes them
+
+## Tests
 
 ```bash
 uv run pytest
 ```
 
-The current suite focuses on:
-
-- API contract validation
-- request flow
-- provider routing policy
-- middleware and audit behavior
-- provider health utilities
-- Redis-backed provider ordering behavior
+The suite covers API contracts, request flow, routing and fallback, retries and deadlines, circuit breaking, rate limiting, auth caching, middleware and audit, tracing and log format, and HTTP-level provider calls through LiteLLM (mocked with respx). Tests make no network calls.
