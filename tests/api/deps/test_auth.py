@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
+import fakeredis.aioredis
 import pytest
 from redis.exceptions import RedisError
 from starlette.requests import Request
@@ -50,17 +51,12 @@ async def test_auth_uses_cache_and_attaches_request_state(mocker) -> None:
     cached_schema = ClientSchema.Read.model_validate(cached_client)
 
     get_cache = mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock())
-    touch_cache = mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     set_cache = mocker.patch("app.api.deps.auth.set_cache", new=mocker.AsyncMock())
     get_cache.return_value = cached_schema.model_dump_json()
 
     client = await auth(request)
 
     assert request.state.client == client
-    touch_cache.assert_awaited_once_with(
-        f"client:{hashlib.sha256(b'secret-key').hexdigest()}",
-        ttl=CACHE_TTL,
-    )
     set_cache.assert_not_called()
 
 
@@ -143,3 +139,19 @@ async def test_auth_succeeds_when_cache_write_fails(mocker) -> None:
 
     assert request.state.client == client
     where.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_auth_cache_hit_does_not_refresh_ttl(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    mocker.patch("lib.cache.store.redis_client", fake_redis)
+    request = _request_with_auth()
+    cache_key = f"client:{hashlib.sha256(b'secret-key').hexdigest()}"
+    cached_schema = ClientSchema.Read.model_validate(_client_payload())
+    await fake_redis.set(cache_key, cached_schema.model_dump_json(), ex=CACHE_TTL)
+    await fake_redis.expire(cache_key, 10)
+
+    client = await auth(request)
+
+    assert request.state.client == client
+    assert 0 < await fake_redis.ttl(cache_key) <= 10

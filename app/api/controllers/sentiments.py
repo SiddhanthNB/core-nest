@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.api.controllers._helpers import _success_response, resolve_completion_model
-from app.api.services.sentiment_service import SentimentService
+from app.api.services.sentiments import SentimentService
 from app.api.validators import Sentiments
 
 router = APIRouter(tags=["sentiments"])

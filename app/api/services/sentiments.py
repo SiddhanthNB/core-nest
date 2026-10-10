@@ -1,12 +1,12 @@
-from .base_service import BaseService
+from .base import BaseService
 
 
-class SummarizationService(BaseService):
+class SentimentService(BaseService):
     def _request_params(self, params) -> dict:
         return params.model_dump(exclude={"messages", "model", "provider"}, exclude_none=True)
 
     async def dispatch(self, params, *, provider_preference: str | None = None, request=None):
-        messages = self._system_messages(app_system_prompt=self._get_system_prompt("summarization", text="")) + [
+        messages = self._system_messages(app_system_prompt=self._get_system_prompt("sentiment", text="")) + [
             message.model_dump() for message in params.messages
         ]
         return await self._fetch_completion(

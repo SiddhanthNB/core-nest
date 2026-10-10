@@ -72,13 +72,12 @@ async def _false() -> bool:
 async def test_completions_request_flow_cache_hit_persists_audit_row(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    touch_cache = mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
-    mocker.patch("app.api.services.base_service.redis_client", fake_redis)
+    mocker.patch("app.api.services.base.redis_client", fake_redis)
     mocker.patch("app.api.core.middleware.constants.APP_ENV", "production")
     acreate = mocker.patch("app.api.core.middleware.AuditLog.acreate", new=mocker.AsyncMock())
     mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         return_value=_fake_completion_adapter(
             provider="mistral",
             model="mistral/ministral-8b-2410",
@@ -102,7 +101,6 @@ async def test_completions_request_flow_cache_hit_persists_audit_row(mocker) -> 
 
     assert response.status_code == 200
     assert response.json()["object"] == "chat.completion"
-    touch_cache.assert_awaited_once()
     kwargs = acreate.await_args.kwargs
     assert kwargs["success"] is True
     assert kwargs["provider"] == "mistral"
@@ -120,13 +118,12 @@ async def test_completions_request_flow_cache_hit_persists_audit_row(mocker) -> 
 async def test_completions_fallback_progression_persists_attempt_stack(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
-    mocker.patch("app.api.services.base_service.redis_client", fake_redis)
+    mocker.patch("app.api.services.base.redis_client", fake_redis)
     mocker.patch("app.api.core.middleware.constants.APP_ENV", "production")
     acreate = mocker.patch("app.api.core.middleware.AuditLog.acreate", new=mocker.AsyncMock())
     mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         side_effect=[
             _fake_completion_adapter(
                 provider="openai",
@@ -197,13 +194,12 @@ async def test_auth_failure_does_not_create_audit_row(mocker) -> None:
 async def test_embeddings_alias_request_persists_provider_locked_audit_row(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
-    mocker.patch("app.api.services.base_service.redis_client", fake_redis)
+    mocker.patch("app.api.services.base.redis_client", fake_redis)
     mocker.patch("app.api.core.middleware.constants.APP_ENV", "production")
     acreate = mocker.patch("app.api.core.middleware.AuditLog.acreate", new=mocker.AsyncMock())
     get_adapter = mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         return_value=_fake_embedding_adapter(provider="google", model="google-embedding-001"),
     )
 
@@ -232,12 +228,11 @@ async def test_embeddings_alias_request_persists_provider_locked_audit_row(mocke
 async def test_embeddings_reject_unsupported_model_alias_with_openai_error(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
-    mocker.patch("app.api.services.base_service.redis_client", fake_redis)
+    mocker.patch("app.api.services.base.redis_client", fake_redis)
     mocker.patch("app.api.core.middleware.constants.APP_ENV", "production")
     acreate = mocker.patch("app.api.core.middleware.AuditLog.acreate", new=mocker.AsyncMock())
-    get_adapter = mocker.patch("app.api.services.base_service.get_adapter")
+    get_adapter = mocker.patch("app.api.services.base.get_adapter")
 
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
@@ -266,7 +261,6 @@ async def test_embeddings_reject_unsupported_model_alias_with_openai_error(mocke
 @pytest.mark.asyncio
 async def test_legacy_routes_are_not_exposed(mocker) -> None:
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
 
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
@@ -295,8 +289,9 @@ async def test_legacy_routes_are_not_exposed(mocker) -> None:
 
 @pytest.mark.asyncio
 async def test_completions_stream_true_returns_openai_error(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
+    mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
 
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
@@ -325,7 +320,6 @@ async def test_completions_stream_true_returns_openai_error(mocker) -> None:
 async def test_completions_missing_model_returns_openai_validation_error(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
 
     app = create_app()
@@ -351,7 +345,6 @@ async def test_completions_missing_model_returns_openai_validation_error(mocker)
 async def test_completions_invalid_role_returns_openai_validation_error(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
 
     app = create_app()
@@ -372,7 +365,6 @@ async def test_completions_invalid_role_returns_openai_validation_error(mocker) 
 async def test_completions_n_greater_than_one_returns_openai_error(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
 
     app = create_app()
@@ -398,7 +390,6 @@ async def test_completions_n_greater_than_one_returns_openai_error(mocker) -> No
 async def test_completions_logprobs_true_returns_openai_error(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("app.api.deps.auth.get_cache", new=mocker.AsyncMock(return_value=_cached_client_json()))
-    mocker.patch("app.api.deps.auth.touch_cache", new=mocker.AsyncMock())
     mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
 
     app = create_app()

@@ -1,6 +1,5 @@
 from typing import Any
 
-from litellm import Router
 from redis.asyncio import Redis
 
 from .base_adapter import BaseAdapter
@@ -16,13 +15,4 @@ class CerebrasAdapter(BaseAdapter):
         )
         api_key = self._api_key()
         if self._completion_model:
-            self._completion_router = Router(
-                model_list=[
-                    {
-                        "model_name": self._completion_model,
-                        "litellm_params": {"model": self._completion_model, "api_key": api_key},
-                    }
-                ],
-                num_retries=0,
-                set_verbose=False,
-            )
+            self._completion_router = self._shared_router("completion", self._completion_model, api_key)

@@ -65,3 +65,48 @@ async def test_rate_limiter_raises_503_when_redis_fails(mocker) -> None:
         await rate_limiter(request, background_tasks, current_client=client)
 
     assert exc_info.value.status_code == 503
+
+
+def _fixed_datetime(mocker, fixed_now: datetime) -> None:
+    fake_datetime = mocker.patch("app.api.deps.rate_limit.datetime")
+    fake_datetime.now.return_value = fixed_now
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_hour_retry_after_is_seconds_left_in_hour(mocker) -> None:
+    mocker.patch("app.api.deps.rate_limit.redis_client", fakeredis.aioredis.FakeRedis(decode_responses=True))
+    _fixed_datetime(mocker, datetime(2026, 1, 1, 10, 30, 15, tzinfo=UTC))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await rate_limiter(_request(), BackgroundTasks(), current_client=_client_schema(requests_per_hour=0))
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.headers["Retry-After"] == "1785"
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_day_retry_after_is_seconds_left_in_day(mocker) -> None:
+    mocker.patch("app.api.deps.rate_limit.redis_client", fakeredis.aioredis.FakeRedis(decode_responses=True))
+    _fixed_datetime(mocker, datetime(2026, 1, 1, 10, 30, 15, tzinfo=UTC))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await rate_limiter(_request(), BackgroundTasks(), current_client=_client_schema(requests_per_day=0))
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.headers["Retry-After"] == "48585"
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_concurrent_rejection_releases_slot(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
+    client = _client_schema(concurrent_requests_limit=1)
+    concurrent_key = f"concurrent:{client.id}"
+
+    await rate_limiter(_request(), BackgroundTasks(), current_client=client)
+    for _ in range(3):
+        with pytest.raises(HTTPException) as exc_info:
+            await rate_limiter(_request(), BackgroundTasks(), current_client=client)
+        assert exc_info.value.status_code == 429
+
+    assert int(await fake_redis.get(concurrent_key)) == 1

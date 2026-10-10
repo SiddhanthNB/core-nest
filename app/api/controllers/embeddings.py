@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.api.controllers._helpers import _success_response, resolve_embedding_model
-from app.api.services.embeddings_service import EmbeddingsService
+from app.api.services.embeddings import EmbeddingsService
 from app.api.validators import Embeddings
 
 router = APIRouter(tags=["embeddings"])

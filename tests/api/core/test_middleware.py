@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import uuid
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from opentelemetry.sdk.trace import TracerProvider
 from starlette.requests import Request
 
 from app.api.core.middleware import _APILoggerMiddleware
@@ -102,3 +104,114 @@ async def test_middleware_skips_audit_row_for_401(mocker) -> None:
     await response.background()
 
     acreate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_middleware_persists_error_as_string(mocker) -> None:
+    middleware = _APILoggerMiddleware(FastAPI())
+    request = _request({"messages": [{"role": "user", "content": "hello"}]})
+    acreate = mocker.patch("app.api.core.middleware.AuditLog.acreate", new=mocker.AsyncMock())
+    mocker.patch("app.api.core.middleware.constants.APP_ENV", "production")
+
+    async def call_next(req: Request):
+        req.state.audit_context["response_meta"]["provider_attempts"] = [
+            {"provider": "groq", "model": "llama", "status": "failed", "error": "RateLimitError"},
+        ]
+        return JSONResponse(content={"detail": "upstream failed"}, status_code=502)
+
+    response = await middleware.dispatch(request, call_next)
+    await response.background()
+
+    assert acreate.await_args.kwargs["error"] == "RateLimitError"
+    assert acreate.await_args.kwargs["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_middleware_error_is_none_on_success(mocker) -> None:
+    middleware = _APILoggerMiddleware(FastAPI())
+    request = _request({"messages": [{"role": "user", "content": "hello"}]})
+    acreate = mocker.patch("app.api.core.middleware.AuditLog.acreate", new=mocker.AsyncMock())
+    mocker.patch("app.api.core.middleware.constants.APP_ENV", "production")
+
+    async def call_next(_: Request):
+        return JSONResponse(content={"id": "cmpl_1"}, status_code=200)
+
+    response = await middleware.dispatch(request, call_next)
+    await response.background()
+
+    assert acreate.await_args.kwargs["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_middleware_derives_request_id_from_active_trace(mocker) -> None:
+    middleware = _APILoggerMiddleware(FastAPI())
+    request = _request({})
+
+    async def call_next(req: Request):
+        return JSONResponse(content={}, status_code=200)
+
+    with TracerProvider().get_tracer("test").start_as_current_span("POST /completions") as span:
+        await middleware.dispatch(request, call_next)
+
+    assert request.state.request_id == str(uuid.UUID(int=span.get_span_context().trace_id))
+    assert request.state.audit_context["request_id"] == request.state.request_id
+
+
+@pytest.mark.asyncio
+async def test_middleware_falls_back_to_uuid4_without_active_trace(mocker) -> None:
+    middleware = _APILoggerMiddleware(FastAPI())
+    request = _request({})
+
+    async def call_next(req: Request):
+        return JSONResponse(content={}, status_code=200)
+
+    await middleware.dispatch(request, call_next)
+
+    assert uuid.UUID(request.state.request_id).version == 4
+
+
+@pytest.mark.asyncio
+async def test_middleware_returns_request_id_header_on_success() -> None:
+    middleware = _APILoggerMiddleware(FastAPI())
+    request = _request({})
+
+    async def call_next(_: Request):
+        return JSONResponse(content={}, status_code=200)
+
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.headers["X-Request-ID"] == request.state.request_id
+
+
+@pytest.mark.asyncio
+async def test_middleware_returns_request_id_header_on_unhandled_error() -> None:
+    middleware = _APILoggerMiddleware(FastAPI())
+    request = _request({})
+
+    async def call_next(_: Request):
+        raise RuntimeError("boom")
+
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 500
+    assert response.headers["X-Request-ID"] == request.state.request_id
+
+
+@pytest.mark.asyncio
+async def test_cors_exposes_request_id_header() -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.api.core.middleware import register_middleware
+
+    app = FastAPI()
+    register_middleware(app)
+
+    @app.get("/ping")
+    async def _ping():
+        return {"ok": True}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.get("/ping", headers={"Origin": "https://example.com"})
+
+    assert response.headers["access-control-expose-headers"] == "X-Request-ID"
+    assert response.headers["X-Request-ID"]

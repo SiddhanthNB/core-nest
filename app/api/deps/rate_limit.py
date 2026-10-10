@@ -49,7 +49,7 @@ async def rate_limiter(request: Request, background_tasks: BackgroundTasks, curr
             hour_key = f"rate_limit:{client_id}:hour:{now.strftime('%Y%m%d%H')}"
             count = await _increment_with_expiry(hour_key, 3600)
             if count > config.requests_per_hour:
-                retry_after = 3600 - now.second
+                retry_after = 3600 - (now.minute * 60 + now.second)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=f"Too many requests per hour - Try Again after {retry_after} seconds",
@@ -60,7 +60,7 @@ async def rate_limiter(request: Request, background_tasks: BackgroundTasks, curr
             day_key = f"rate_limit:{client_id}:day:{now.strftime('%Y%m%d')}"
             count = await _increment_with_expiry(day_key, 86400)
             if count > config.requests_per_day:
-                retry_after = 86400 - now.second
+                retry_after = 86400 - (now.hour * 3600 + now.minute * 60 + now.second)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=f"Too many requests per day - Try Again after {retry_after} seconds",
@@ -73,6 +73,7 @@ async def rate_limiter(request: Request, background_tasks: BackgroundTasks, curr
             await redis_client.expire(concurrent_key, 300)
 
             if current_concurrent_count > config.concurrent_requests_limit:
+                await _decrement_concurrent_counter(concurrent_key)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Too many concurrent requests",

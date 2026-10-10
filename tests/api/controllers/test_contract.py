@@ -329,7 +329,7 @@ async def test_completions_controller_returns_public_model_and_headers(mocker) -
         return payload
 
     mocker.patch(
-        "app.api.services.completion_service.CompletionService.dispatch",
+        "app.api.services.completions.CompletionService.dispatch",
         new=mocker.AsyncMock(side_effect=_dispatch),
     )
 
@@ -362,7 +362,7 @@ async def test_embeddings_controller_returns_public_model_and_headers(mocker) ->
         return payload
 
     mocker.patch(
-        "app.api.services.embeddings_service.EmbeddingsService.dispatch",
+        "app.api.services.embeddings.EmbeddingsService.dispatch",
         new=mocker.AsyncMock(side_effect=_dispatch),
     )
 
@@ -379,7 +379,7 @@ async def test_embeddings_controller_returns_public_model_and_headers(mocker) ->
 @pytest.mark.asyncio
 async def test_controller_bubbles_service_http_exception(mocker) -> None:
     mocker.patch(
-        "app.api.services.completion_service.CompletionService.dispatch",
+        "app.api.services.completions.CompletionService.dispatch",
         new=mocker.AsyncMock(
             side_effect=HTTPException(status_code=503, detail="No provider could satisfy the request")
         ),

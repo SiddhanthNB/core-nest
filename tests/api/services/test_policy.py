@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from types import SimpleNamespace
 
 import fakeredis.aioredis
@@ -7,6 +9,10 @@ import pytest
 from fastapi import HTTPException
 from litellm import UnsupportedParamsError
 from litellm.types.utils import Usage
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import StatusCode
 from redis.exceptions import RedisError
 
 from app.api.services._helpers import (
@@ -15,14 +21,15 @@ from app.api.services._helpers import (
     _response_meta,
     _validate_json_response_payload,
 )
-from app.api.services.completion_service import CompletionService
-from app.api.services.embeddings_service import EmbeddingsService
-from app.api.services.sentiment_service import SentimentService
-from app.api.services.summarization_service import SummarizationService
+from app.api.services.completions import CompletionService
+from app.api.services.embeddings import EmbeddingsService
+from app.api.services.sentiments import SentimentService
+from app.api.services.summaries import SummarizationService
 from app.api.validators.completions import Completions
 from app.api.validators.embeddings import Embeddings
 from app.api.validators.sentiments import Sentiments
 from app.api.validators.summarization import Summarization
+from app.config.tracing import TRACER_NAME
 
 
 def _request():
@@ -287,7 +294,7 @@ def test_json_validation_and_response_meta_accept_model_like_payload() -> None:
 async def test_completion_service_falls_back_on_invalid_json_when_json_requested(mocker) -> None:
     service = CompletionService()
     request = _request()
-    mocker.patch("app.api.services.base_service.redis_client", object())
+    mocker.patch("app.api.services.base.redis_client", object())
 
     async def _invalid_json_payload(*, messages, request_params, response_validator=None):
         payload = {"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
@@ -302,7 +309,7 @@ async def test_completion_service_falls_back_on_invalid_json_when_json_requested
         return payload
 
     mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         side_effect=[
             type(
                 "_Adapter",
@@ -361,7 +368,7 @@ async def test_sentiment_service_rejects_invalid_json_from_forced_provider(mocke
     service = SentimentService()
     request = _request()
     mocker.patch.object(service, "_get_system_prompt", return_value="system sentiment prompt")
-    mocker.patch("app.api.services.base_service.redis_client", object())
+    mocker.patch("app.api.services.base.redis_client", object())
 
     async def _invalid_json_payload(*, messages, request_params, response_validator=None):
         payload = {"choices": [{"message": {"content": "not json"}, "finish_reason": "stop"}]}
@@ -370,7 +377,7 @@ async def test_sentiment_service_rejects_invalid_json_from_forced_provider(mocke
         return payload
 
     mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         return_value=type(
             "_Adapter",
             (),
@@ -408,13 +415,13 @@ async def test_sentiment_service_rejects_invalid_json_from_forced_provider(mocke
 @pytest.mark.asyncio
 async def test_completion_service_surfaces_litellm_param_errors(mocker) -> None:
     service = CompletionService()
-    mocker.patch("app.api.services.base_service.redis_client", object())
+    mocker.patch("app.api.services.base.redis_client", object())
     mocker.patch(
         "app.api.services._helpers.get_supported_openai_params",
         return_value=["messages", "temperature", "top_p"],
     )
     mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         return_value=type(
             "_Adapter",
             (),
@@ -449,9 +456,9 @@ async def test_completion_service_surfaces_litellm_param_errors(mocker) -> None:
 async def test_completion_service_forced_provider_circuit_open_records_skipped_attempt(mocker) -> None:
     service = CompletionService()
     request = _request()
-    mocker.patch("app.api.services.base_service.redis_client", object())
+    mocker.patch("app.api.services.base.redis_client", object())
     mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         return_value=type(
             "_Adapter",
             (),
@@ -555,8 +562,8 @@ async def test_completion_service_round_robin_respects_circuit_open_and_falls_fo
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     await fake_redis.set(_completion_round_robin_key(), "1")
     await fake_redis.set("circuit:google:open", "open")
-    mocker.patch("app.api.services.base_service.redis_client", fake_redis)
-    mocker.patch("app.api.services.base_service.constants.COMPLETION_PROVIDERS", ("mistral", "google", "openrouter"))
+    mocker.patch("app.api.services.base.redis_client", fake_redis)
+    mocker.patch("app.api.services.base.constants.COMPLETION_PROVIDERS", ("mistral", "google", "openrouter"))
 
     def _get_adapter(provider_name, *, redis, request=None, provider_preference=None):
         adapters = {
@@ -582,7 +589,7 @@ async def test_completion_service_round_robin_respects_circuit_open_and_falls_fo
         }
         return adapters[provider_name]
 
-    mocker.patch("app.api.services.base_service.get_adapter", side_effect=_get_adapter)
+    mocker.patch("app.api.services.base.get_adapter", side_effect=_get_adapter)
 
     result = await service.dispatch(
         Completions(model="core-nest/auto", messages=[{"role": "user", "content": "hello"}]),
@@ -613,13 +620,13 @@ async def test_completion_service_round_robin_respects_circuit_open_and_falls_fo
 async def test_embeddings_service_surfaces_litellm_param_errors(mocker) -> None:
     service = EmbeddingsService()
     request = _request()
-    mocker.patch("app.api.services.base_service.redis_client", object())
+    mocker.patch("app.api.services.base.redis_client", object())
     mocker.patch(
         "app.api.services._helpers.get_supported_openai_params",
         return_value=["dimensions", "encoding_format", "input"],
     )
     mocker.patch(
-        "app.api.services.base_service.get_adapter",
+        "app.api.services.base.get_adapter",
         return_value=type(
             "_Adapter",
             (),
@@ -657,6 +664,220 @@ async def test_embeddings_service_surfaces_litellm_param_errors(mocker) -> None:
                 "status": "failed",
                 "error": "UnsupportedParamsError",
             }
+        ],
+        "attempt_count": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_completion_fallback_records_one_span_per_provider_attempt(mocker) -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    mocker.patch("app.api.services.base.tracer", provider.get_tracer(TRACER_NAME))
+    mocker.patch("app.api.services.base.redis_client", object())
+    mocker.patch(
+        "app.api.services.base._ordered_completion_providers",
+        new=mocker.AsyncMock(return_value=["groq", "mistral", "google"]),
+    )
+    skipped = _completion_adapter(provider="groq", model="groq/llama", mocker=mocker)
+    skipped.is_circuit_open = mocker.AsyncMock(return_value=True)
+    failed = _completion_adapter(provider="mistral", model="mistral/small", mocker=mocker)
+    failed.acompletion = mocker.AsyncMock(side_effect=RuntimeError("boom"))
+    succeeded = _completion_adapter(provider="google", model="gemini/flash", mocker=mocker)
+    mocker.patch("app.api.services.base.get_adapter", side_effect=[skipped, failed, succeeded])
+
+    await CompletionService()._fetch_completion(
+        messages=[{"role": "user", "content": "hello"}], request_params={}, provider_preference=None, request=_request()
+    )
+
+    spans = exporter.get_finished_spans()
+    assert [span.name for span in spans] == ["chat groq/llama", "chat mistral/small", "chat gemini/flash"]
+    assert [dict(span.attributes) for span in spans] == [
+        {"gen_ai.operation.name": "chat", "gen_ai.provider.name": "groq", "gen_ai.request.model": "groq/llama", "outcome": "skipped", "error.type": "CircuitOpen"},  # fmt: skip
+        {"gen_ai.operation.name": "chat", "gen_ai.provider.name": "mistral", "gen_ai.request.model": "mistral/small", "outcome": "failed", "error.type": "RuntimeError"},  # fmt: skip
+        {"gen_ai.operation.name": "chat", "gen_ai.provider.name": "google", "gen_ai.request.model": "gemini/flash", "outcome": "succeeded"},  # fmt: skip
+    ]
+    assert [span.status.status_code for span in spans] == [StatusCode.UNSET, StatusCode.ERROR, StatusCode.OK]
+
+
+def _fake_clock(mocker) -> list[float]:
+    clock = [1000.0]
+    mocker.patch("app.api.services._helpers.time", SimpleNamespace(monotonic=lambda: clock[0]))
+    return clock
+
+
+@pytest.mark.asyncio
+async def test_completion_returns_504_when_request_deadline_exceeded(mocker) -> None:
+    clock = _fake_clock(mocker)
+    request = _request()
+    mocker.patch("app.api.services.base.redis_client", object())
+    mocker.patch(
+        "app.api.services.base._ordered_completion_providers",
+        new=mocker.AsyncMock(return_value=["groq", "mistral"]),
+    )
+
+    async def _slow_failure(*, messages, request_params, response_validator=None):
+        clock[0] += 91
+        raise RuntimeError("timed out")
+
+    slow = _completion_adapter(provider="groq", model="groq/llama", mocker=mocker)
+    slow.acompletion = mocker.AsyncMock(side_effect=_slow_failure)
+    unused = _completion_adapter(provider="mistral", model="mistral/small", mocker=mocker)
+    get_adapter = mocker.patch("app.api.services.base.get_adapter", side_effect=[slow, unused])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await CompletionService()._fetch_completion(
+            messages=[{"role": "user", "content": "hello"}],
+            request_params={},
+            provider_preference=None,
+            request=request,
+        )
+
+    assert exc_info.value.status_code == 504
+    assert exc_info.value.detail == "Request deadline exceeded"
+    assert request.state.llm_deadline == 1090.0
+    get_adapter.assert_called_once()
+    unused.acompletion.assert_not_awaited()
+    assert request.state.audit_context["response_meta"] == {
+        "provider_attempts": [{"provider": "groq", "model": "groq/llama", "status": "failed", "error": "RuntimeError"}],
+        "attempt_count": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_completion_keeps_request_errors_after_deadline(mocker) -> None:
+    clock = _fake_clock(mocker)
+    mocker.patch("app.api.services.base.redis_client", object())
+    error = UnsupportedParamsError(message="unsupported params", llm_provider="groq", model="groq/llama")
+
+    async def _slow_bad_request(*, messages, request_params, response_validator=None):
+        clock[0] += 91
+        raise error
+
+    adapter = _completion_adapter(provider="groq", model="groq/llama", mocker=mocker)
+    adapter.acompletion = mocker.AsyncMock(side_effect=_slow_bad_request)
+    mocker.patch("app.api.services.base.get_adapter", return_value=adapter)
+    mocker.patch("app.api.services._helpers.get_supported_openai_params", return_value=["temperature"])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await CompletionService()._fetch_completion(
+            messages=[{"role": "user", "content": "hello"}],
+            request_params={},
+            provider_preference="groq",
+            request=_request(),
+        )
+
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_embeddings_returns_504_when_request_deadline_exceeded(mocker) -> None:
+    clock = _fake_clock(mocker)
+    request = _request()
+    mocker.patch("app.api.services.base.redis_client", object())
+
+    async def _slow_failure(*, input_data, request_params):
+        clock[0] += 91
+        raise RuntimeError("timed out")
+
+    mocker.patch(
+        "app.api.services.base.get_adapter",
+        return_value=type(
+            "_Adapter",
+            (),
+            {
+                "_provider_name": "openrouter",
+                "_embedding_model": "openrouter/embed",
+                "is_circuit_open": staticmethod(mocker.AsyncMock(return_value=False)),
+                "aembedding": staticmethod(mocker.AsyncMock(side_effect=_slow_failure)),
+            },
+        )(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await EmbeddingsService()._fetch_embedding(
+            input_data=["hello"], request_params={}, provider_preference="openrouter", request=request
+        )
+
+    assert exc_info.value.status_code == 504
+    assert request.state.audit_context["response_meta"] == {
+        "provider_attempts": [
+            {"provider": "openrouter", "model": "openrouter/embed", "status": "failed", "error": "RuntimeError"}
+        ],
+        "attempt_count": 1,
+    }
+
+
+async def _hang(**kwargs):
+    await asyncio.Event().wait()
+
+
+@pytest.mark.asyncio
+async def test_completion_hard_deadline_cancels_hanging_provider(mocker) -> None:
+    mocker.patch("app.api.services._helpers._REQUEST_DEADLINE_SECONDS", 0.05)
+    request = _request()
+    mocker.patch("app.api.services.base.redis_client", object())
+    mocker.patch(
+        "app.api.services.base._ordered_completion_providers",
+        new=mocker.AsyncMock(return_value=["groq", "mistral"]),
+    )
+    hanging = _completion_adapter(provider="groq", model="groq/llama", mocker=mocker)
+    hanging.acompletion = mocker.AsyncMock(side_effect=_hang)
+    unused = _completion_adapter(provider="mistral", model="mistral/small", mocker=mocker)
+    get_adapter = mocker.patch("app.api.services.base.get_adapter", side_effect=[hanging, unused])
+
+    started = time.monotonic()
+    with pytest.raises(HTTPException) as exc_info:
+        await CompletionService()._fetch_completion(
+            messages=[{"role": "user", "content": "hello"}],
+            request_params={},
+            provider_preference=None,
+            request=request,
+        )
+
+    assert time.monotonic() - started < 1
+    assert exc_info.value.status_code == 504
+    assert exc_info.value.detail == "Request deadline exceeded"
+    get_adapter.assert_called_once()
+    unused.acompletion.assert_not_awaited()
+    assert request.state.audit_context["response_meta"] == {
+        "provider_attempts": [{"provider": "groq", "model": "groq/llama", "status": "failed", "error": "TimeoutError"}],
+        "attempt_count": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_embeddings_hard_deadline_cancels_hanging_provider(mocker) -> None:
+    mocker.patch("app.api.services._helpers._REQUEST_DEADLINE_SECONDS", 0.05)
+    request = _request()
+    mocker.patch("app.api.services.base.redis_client", object())
+    mocker.patch(
+        "app.api.services.base.get_adapter",
+        return_value=type(
+            "_Adapter",
+            (),
+            {
+                "_provider_name": "openrouter",
+                "_embedding_model": "openrouter/embed",
+                "is_circuit_open": staticmethod(mocker.AsyncMock(return_value=False)),
+                "aembedding": staticmethod(mocker.AsyncMock(side_effect=_hang)),
+            },
+        )(),
+    )
+
+    started = time.monotonic()
+    with pytest.raises(HTTPException) as exc_info:
+        await EmbeddingsService()._fetch_embedding(
+            input_data=["hello"], request_params={}, provider_preference="openrouter", request=request
+        )
+
+    assert time.monotonic() - started < 1
+    assert exc_info.value.status_code == 504
+    assert exc_info.value.detail == "Request deadline exceeded"
+    assert request.state.audit_context["response_meta"] == {
+        "provider_attempts": [
+            {"provider": "openrouter", "model": "openrouter/embed", "status": "failed", "error": "TimeoutError"}
         ],
         "attempt_count": 1,
     }

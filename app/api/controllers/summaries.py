@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.api.controllers._helpers import _success_response, resolve_completion_model
-from app.api.services.summarization_service import SummarizationService
+from app.api.services.summaries import SummarizationService
 from app.api.validators import Summarization
 
 router = APIRouter(tags=["summaries"])

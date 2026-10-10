@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -15,6 +16,7 @@ from app.config.logger import logger
 
 _COMPLETION_ROUND_ROBIN_KEY_PREFIX = "llm:routing:completion:rr_counter"
 _COMPLETION_ROUND_ROBIN_TTL_SECONDS = 36 * 60 * 60
+_REQUEST_DEADLINE_SECONDS = 90
 
 
 def _provider_attempts(request: Any) -> list[dict[str, Any]]:
@@ -25,6 +27,22 @@ def _provider_attempts(request: Any) -> list[dict[str, Any]]:
     provider_attempts = response_meta.setdefault("provider_attempts", [])
     request.state.audit_context = audit_context
     return provider_attempts
+
+
+def _start_request_deadline(request: Any) -> float:
+    deadline = time.monotonic() + _REQUEST_DEADLINE_SECONDS
+    state = getattr(request, "state", None)
+    if state is not None:
+        state.llm_deadline = deadline
+    return deadline
+
+
+def _deadline_exceeded(deadline: float) -> bool:
+    return time.monotonic() >= deadline
+
+
+def _remaining_seconds(deadline: float) -> float:
+    return max(0.0, deadline - time.monotonic())
 
 
 def _payload_mapping(payload: Any) -> Mapping[str, Any]:
@@ -88,19 +106,14 @@ async def _ordered_completion_providers(provider_preference: str | None, *, redi
         if counter == 1:
             await redis_client.expire(round_robin_key, _COMPLETION_ROUND_ROBIN_TTL_SECONDS)
     except (RedisError, AttributeError, TypeError, ValueError) as exc:
-        request_id = getattr(getattr(request, "state", None), "request_id", "-")
         logger.warning(
-            f"[request_id: {request_id[:8] if request_id != '-' else '-'}] "
             f"Failed to read round-robin ordering from Redis with {type(exc).__name__}. "
             "Falling back to static provider ordering."
         )
         return providers
 
     start_index = (counter - 1) % len(providers)
-    request_id = getattr(getattr(request, "state", None), "request_id", "-")
-    logger.debug(
-        f"[request_id: {request_id[:8] if request_id != '-' else '-'}] Round-robin used with key {round_robin_key}"
-    )
+    logger.debug(f"Round-robin used with key {round_robin_key}")
     return providers[start_index:] + providers[:start_index]
 
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.api.controllers._helpers import _success_response, resolve_completion_model
-from app.api.services.completion_service import CompletionService
+from app.api.services.completions import CompletionService
 from app.api.validators import Completions
 
 router = APIRouter(tags=["completions"])

@@ -7,6 +7,7 @@ from typing import Any
 
 from app.config import constants
 from app.config.redis import redis_client
+from app.config.tracing import tracer
 from lib.llm.adapters import get_adapter
 
 _MAX_REASON_LENGTH = 160
@@ -165,10 +166,12 @@ async def _run_checks(providers: tuple[str, ...], check: Any) -> list[dict[str, 
     results: list[dict[str, Any]] = []
     for provider in providers:
         started = time.perf_counter()
-        try:
-            results.append(await check(provider))
-        except Exception as exc:
-            results.append(_failure_result(provider, started, exc))
+        with tracer.start_as_current_span(f"{check.__name__.removeprefix('_check_')} health check {provider}", attributes={"gen_ai.provider.name": provider}) as span:  # fmt: skip
+            try:
+                results.append(await check(provider))
+            except Exception as exc:
+                results.append(_failure_result(provider, started, exc))
+            span.set_attribute("outcome", "succeeded" if results[-1]["status"] == "success" else "failed")
     return results
 
 

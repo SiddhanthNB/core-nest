@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from starlette.background import BackgroundTask
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -19,7 +20,8 @@ from app.db.models.audit_logs import AuditLog
 class _APILoggerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
         start = time.perf_counter()
-        request_id = str(uuid.uuid4())
+        span_context = trace.get_current_span().get_span_context()
+        request_id = str(uuid.UUID(int=span_context.trace_id) if span_context.is_valid else uuid.uuid4())
         request.state.request_id = request_id
         request_body = await self._request_json(request)
         request.state.audit_context = self._build_audit_context(
@@ -27,15 +29,13 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             request_body=request_body,
         )
-        logger.info(
-            f"[request_id: {request_id[:8]}] [method: {request.method}] [path: {request.url.path}] Request started"
-        )
+        logger.info(f"[method: {request.method}] [path: {request.url.path}] Request started")
 
         try:
             response = await call_next(request)
         except Exception as exc:
             logger.error(
-                f"[request_id: {request_id[:8]}] [method: {request.method}] [path: {request.url.path}] "
+                f"[method: {request.method}] [path: {request.url.path}] "
                 f"[error_type: {type(exc).__name__}] Unhandled request failure",
                 exc_info=True,
             )
@@ -43,12 +43,10 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Internal Server Error"},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        response.headers["X-Request-ID"] = request_id
 
         process_time_ms = round((time.perf_counter() - start) * 1000, 2)
-        logger.info(
-            f"[request_id: {request_id[:8]}] [status_code: {response.status_code}] "
-            f"[latency_ms: {process_time_ms}] Request finished"
-        )
+        logger.info(f"[status_code: {response.status_code}] [latency_ms: {process_time_ms}] Request finished")
 
         existing_background = response.background
         response.background = BackgroundTask(
@@ -111,7 +109,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             }
 
             client = getattr(request.state, "client", None)
-            error_msg = (last_failed_attempt or {}).get("error") or (f"HTTP {status_code}" if status_code >= 400 else None),  # fmt: skip
+            error_msg = (last_failed_attempt or {}).get("error") or (f"HTTP {status_code}" if status_code >= 400 else None)  # fmt: skip
             payload = {
                 "request_id": uuid.UUID(str(audit_context["request_id"])),
                 "path": request.url.path,
@@ -174,5 +172,6 @@ def register_middleware(app: FastAPI) -> None:
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
     )
     app.add_middleware(_APILoggerMiddleware)

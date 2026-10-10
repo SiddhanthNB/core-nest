@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import UUID4, BaseModel, ConfigDict
 
 
 class AuditLog:
     class Create(BaseModel):
-        request_id: UUID4
+        request_id: UUID
         path: str
         method: str
         client_id: UUID4 | None = None
@@ -32,7 +33,7 @@ class AuditLog:
         response_meta: dict[str, Any] | None = None
 
     class Read(BaseModel):
-        request_id: UUID4
+        request_id: UUID
         path: str
         method: str
         client_id: UUID4 | None

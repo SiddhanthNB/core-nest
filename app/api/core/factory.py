@@ -4,6 +4,7 @@ from app.api.core._helpers import register_exception_handlers
 from app.api.core.lifespan import lifespan
 from app.api.core.middleware import register_middleware
 from app.api.core.routes import register_routes
+from app.config.tracing import instrument_app
 
 
 def create_app() -> FastAPI:
@@ -11,4 +12,5 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     register_middleware(app)
     register_routes(app)
+    instrument_app(app)
     return app

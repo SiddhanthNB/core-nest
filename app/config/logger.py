@@ -17,15 +17,24 @@ def _rotated_log_file_name(default_name: str) -> str:
     return str(_log_file_path(default_name.rsplit(".", 1)[-1]))
 
 
+class _TraceContextFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        for attr in ("otelTraceID", "otelSpanID"):
+            if getattr(record, attr, "0") == "0":
+                setattr(record, attr, "-")
+        return True
+
+
 def _configure_logger() -> logging.Logger:
     log_level = logging.INFO if constants.APP_ENV.lower() == "production" else logging.DEBUG
 
     formatter = logging.Formatter(
-        f"[%(asctime)s] [%(levelname)s] [{constants.PROJECT_NAME}] [pid: %(process)d] : %(message)s",
+        f"[%(asctime)s] [%(levelname)s] [{constants.PROJECT_NAME}] [pid: %(process)d] [trace: %(otelTraceID)s] [span: %(otelSpanID)s] : %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     console_handler = logging.StreamHandler(sys.__stdout__)
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(_TraceContextFilter())
 
     logs_dir = constants.REPO_ROOT / "logs"
     logs_dir.mkdir(exist_ok=True)
@@ -40,6 +49,7 @@ def _configure_logger() -> logging.Logger:
     )
     file_handler.namer = _rotated_log_file_name
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(_TraceContextFilter())
 
     _root_logger = logging.getLogger()
     _root_logger.handlers.clear()

@@ -20,8 +20,3 @@ async def delete_cache(*keys: str):
 async def update_cache(key: str, value: str):
     """Update an existing key while preserving its TTL."""
     await redis_client.set(key, value, keepttl=True)
-
-
-async def touch_cache(key: str, ttl: int):
-    """Refresh the expiration time of an existing key."""
-    await redis_client.expire(key, ttl)
