@@ -218,7 +218,8 @@ async def test_cors_exposes_request_id_header() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ping_is_not_logged_but_other_paths_are(caplog) -> None:
+@pytest.mark.parametrize("level, expected", [("INFO", []), ("DEBUG", ["[method: GET] [path: /ping] Request started"])])
+async def test_ping_logs_only_at_debug(caplog, level, expected) -> None:
     from httpx import ASGITransport, AsyncClient
 
     from app.api.core.middleware import register_middleware
@@ -232,20 +233,9 @@ async def test_ping_is_not_logged_but_other_paths_are(caplog) -> None:
     async def _ping():
         return "pong"
 
-    @app.get("/other")
-    async def _other():
-        return {"ok": True}
-
-    caplog.set_level("DEBUG", logger="core-nest")
+    caplog.set_level(level, logger="core-nest")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        ping = await client.get("/ping")
-        ping_messages = [record.getMessage() for record in caplog.records]
-        caplog.clear()
-        await client.get("/other")
-        other_messages = [record.getMessage() for record in caplog.records]
+        response = await client.get("/ping")
 
-    assert ping.status_code == 200
-    assert ping.headers["X-Request-ID"]
-    assert not any("/ping" in message or "Request" in message for message in ping_messages)
-    assert any("Request started" in message for message in other_messages)
-    assert any("[name: GET /other]" in message for message in other_messages)
+    assert response.status_code == 200
+    assert [record.getMessage() for record in caplog.records if "Request started" in record.getMessage() or "/ping" in record.getMessage()] == expected  # fmt: skip

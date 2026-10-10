@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 import uuid
 from collections.abc import Callable
@@ -16,9 +17,6 @@ from app.config import constants
 from app.config.logger import logger
 from app.db.models.audit_logs import AuditLog
 
-# health checks (Render pings every few seconds); only logged when they fail
-_QUIET_PATHS = {"/ping"}
-
 
 class _APILoggerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
@@ -32,9 +30,8 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             request_body=request_body,
         )
-        quiet = request.url.path in _QUIET_PATHS
-        if not quiet:
-            logger.info(f"[method: {request.method}] [path: {request.url.path}] Request started")
+        log_level = logging.DEBUG if request.url.path == "/ping" else logging.INFO
+        logger.log(log_level, f"[method: {request.method}] [path: {request.url.path}] Request started")
 
         try:
             response = await call_next(request)
@@ -51,8 +48,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
         response.headers["X-Request-ID"] = request_id
 
         process_time_ms = round((time.perf_counter() - start) * 1000, 2)
-        if not quiet or response.status_code >= 400:
-            logger.info(f"[status_code: {response.status_code}] [latency_ms: {process_time_ms}] Request finished")
+        logger.log(log_level, f"[status_code: {response.status_code}] [latency_ms: {process_time_ms}] Request finished")
 
         existing_background = response.background
         response.background = BackgroundTask(
