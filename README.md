@@ -311,7 +311,7 @@ git tag v0.1.0 && git push origin v0.1.0
 
 The [CI/CD workflow](https://github.com/SiddhanthNB/core-nest/blob/main/.github/workflows/ci-cd.yml) runs ruff and pytest on the tagged commit, then calls the Render deploy hook for that exact commit.
 
-- requires the `RENDER_DEPLOY_HOOK_URL` repository secret
+- requires the `RENDER_CORENEST_DEPLOY_URL` repository secret
 - runtime env vars are set on Render, not in the workflow
 - Render build command: `uv sync --locked --no-dev`
 - run pending migrations before tagging a release that includes them

@@ -46,5 +46,5 @@ jobs:
       - name: Trigger Render deploy of the tagged commit
         # runtime env vars (APP_ENV, DB, Redis, provider keys, etc.) are injected on the Render platform, not here
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        run: curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&ref=${GITHUB_SHA}"
+          RENDER_CORENEST_DEPLOY_URL: ${{ secrets.RENDER_CORENEST_DEPLOY_URL }}
+        run: curl -fsS -X POST "${RENDER_CORENEST_DEPLOY_URL}&ref=${GITHUB_SHA}"
