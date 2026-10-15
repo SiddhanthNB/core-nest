@@ -16,7 +16,7 @@ class RateLimitConfig(db.Model):
     requests_per_hour: int | None
     requests_per_day: int | None
     concurrent_requests_limit: int | None
-    client_id: uuid.UUID = mapped_column(PG_UUID(as_uuid=True), ForeignKey("corenest__clients.id"), nullable=False, unique=True)
+    client_id: uuid.UUID = mapped_column(PG_UUID(as_uuid=True), ForeignKey("corenest__clients.id", ondelete="CASCADE"), nullable=False, unique=True)
     created_at: datetime = mapped_column(DateTime(), nullable=False, info={"set_on": "create"})
     updated_at: datetime = mapped_column(DateTime(), nullable=False, info={"set_on": {"create", "update"}})
 

@@ -1,12 +1,16 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
 from redis.exceptions import RedisError
 
 from app.api.deps.auth import auth
+from app.config import constants
 from app.config.logger import logger
 from app.config.redis import redis_client
 from app.db.schemas.clients import Client as ClientSchema
+
+_DEFAULT_RATE_LIMITS = SimpleNamespace(**constants.DEFAULT_RATE_LIMITS)
 
 
 async def _increment_with_expiry(key: str, ttl: int) -> int:
@@ -26,10 +30,7 @@ async def rate_limiter(request: Request, background_tasks: BackgroundTasks, curr
     """
     request.state.client = current_client
 
-    if not current_client.rate_limit_config:
-        return
-
-    config = current_client.rate_limit_config
+    config = current_client.rate_limit_config or _DEFAULT_RATE_LIMITS
     client_id = str(current_client.id)
     now = datetime.now(UTC)
 

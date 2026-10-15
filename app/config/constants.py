@@ -29,6 +29,14 @@ REDIS_URL = os.getenv("REDIS_URL").replace("[YOUR-PASSWORD]", quote_plus(REDIS_P
 
 GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
 
+# applied to new clients and to any client without a rate-limit config row
+DEFAULT_RATE_LIMITS = {
+    "requests_per_minute": 60,
+    "requests_per_hour": 1000,
+    "requests_per_day": 5000,
+    "concurrent_requests_limit": 5,
+}
+
 
 def _load_yaml_config(path: Path, name: str) -> dict:
     try:

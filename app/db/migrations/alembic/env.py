@@ -10,6 +10,7 @@ from duo_orm.migrations.config import get_version_table
 project_root = os.path.join(os.path.dirname(__file__), "../../../..")
 sys.path.insert(0, project_root)
 
+import app.db.models  # noqa: E402, F401  (registers every model on the shared metadata)
 from app.db import db  # noqa: E402
 
 # this is the Alembic Config object, which provides

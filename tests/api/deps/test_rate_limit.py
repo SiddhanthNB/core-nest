@@ -110,3 +110,18 @@ async def test_rate_limiter_concurrent_rejection_releases_slot(mocker) -> None:
         assert exc_info.value.status_code == 429
 
     assert int(await fake_redis.get(concurrent_key)) == 1
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_applies_default_limits_without_config(mocker) -> None:
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    mocker.patch("app.api.deps.rate_limit.redis_client", fake_redis)
+    mocker.patch("app.api.deps.rate_limit._DEFAULT_RATE_LIMITS", SimpleNamespace(requests_per_minute=1, requests_per_hour=None, requests_per_day=None, concurrent_requests_limit=None))  # fmt: skip
+    client = _client_schema()
+    client.rate_limit_config = None
+
+    await rate_limiter(_request(), BackgroundTasks(), current_client=client)
+    with pytest.raises(HTTPException) as exc_info:
+        await rate_limiter(_request(), BackgroundTasks(), current_client=client)
+
+    assert exc_info.value.status_code == 429

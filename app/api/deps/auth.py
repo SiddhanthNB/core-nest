@@ -8,7 +8,16 @@ from app.db.models import Client
 from app.db.schemas.clients import Client as ClientSchema
 from lib.cache.store import get_cache, set_cache
 
-CACHE_TTL = 300
+# sliding: every cache hit resets it; clients.* tasks evict on change
+CACHE_TTL = 600
+
+
+def hash_api_key(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode()).hexdigest()
+
+
+def client_cache_key(hashed_api_key: str) -> str:
+    return f"client:{hashed_api_key}"
 
 
 def _extract_api_key(request: Request) -> str:
@@ -28,11 +37,11 @@ async def auth(request: Request) -> ClientSchema.Read:
     Uses cache-first lookup and eager-loads the rate-limit config on DB misses.
     """
     api_key = _extract_api_key(request)
-    hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
-    cache_key = f"client:{hashed_key}"
+    hashed_key = hash_api_key(api_key)
+    cache_key = client_cache_key(hashed_key)
 
     try:
-        cached_client_json = await get_cache(cache_key)
+        cached_client_json = await get_cache(cache_key, ttl=CACHE_TTL)
     except RedisError as exc:
         logger.warning(f"Client auth cache read failed with {type(exc).__name__}")
         cached_client_json = None

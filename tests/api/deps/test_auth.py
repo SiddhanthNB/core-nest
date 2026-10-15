@@ -142,7 +142,7 @@ async def test_auth_succeeds_when_cache_write_fails(mocker) -> None:
 
 
 @pytest.mark.asyncio
-async def test_auth_cache_hit_does_not_refresh_ttl(mocker) -> None:
+async def test_auth_cache_hit_slides_ttl(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("lib.cache.store.redis_client", fake_redis)
     request = _request_with_auth()
@@ -154,4 +154,4 @@ async def test_auth_cache_hit_does_not_refresh_ttl(mocker) -> None:
     client = await auth(request)
 
     assert request.state.client == client
-    assert 0 < await fake_redis.ttl(cache_key) <= 10
+    assert 10 < await fake_redis.ttl(cache_key) <= CACHE_TTL

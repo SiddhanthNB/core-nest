@@ -6,9 +6,11 @@ async def set_cache(key: str, value: str, ttl: int | None = None):
     await redis_client.set(key, value, ex=ttl)
 
 
-async def get_cache(key: str) -> str | None:
-    """Get a value from the cache."""
-    return await redis_client.get(key)
+async def get_cache(key: str, ttl: int | None = None) -> str | None:
+    """Get a value from the cache; with a TTL, also reset its expiry (sliding)."""
+    if ttl is None:
+        return await redis_client.get(key)
+    return await redis_client.getex(key, ex=ttl)
 
 
 async def delete_cache(*keys: str):

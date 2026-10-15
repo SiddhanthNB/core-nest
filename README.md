@@ -208,8 +208,8 @@ Intentional differences:
 
 ## Auth, Rate Limits, and Audit
 
-- bearer-token client auth (keys stored hashed, cached in Redis for 5 minutes)
-- Redis-backed rate limiting (per minute, hour, day, and concurrent)
+- bearer-token client auth (keys stored hashed, cached in Redis with a 10-minute sliding TTL)
+- Redis-backed rate limiting (per minute, hour, day, and concurrent); clients without limits get the defaults (60/min, 1000/hour, 5000/day, 5 concurrent)
 - Redis-backed provider circuit state
 - Postgres audit logging, including provider attempt stacks; skipped in development
 
@@ -290,10 +290,25 @@ uv run duo-orm migration.current
 uv run duo-orm migration.check
 ```
 
+## Client Management
+
+Clients are managed only through these tasks. Each change evicts the client's auth cache, so it takes effect immediately. Treat the database tables as read-only: edits made directly in Supabase are not picked up while the client is cached.
+
+```bash
+uv run invoke clients.create --name "Acme Corp" [--per-minute 60 --per-hour 1000 --per-day 5000 --concurrent 5]
+uv run invoke clients.get --name "Acme Corp"
+uv run invoke clients.update --name "Acme Corp" [limits] [--activate | --deactivate] [--rotate-key]
+uv run invoke clients.delete --name "Acme Corp"
+uv run invoke clients.list
+```
+
+- `create` prints the API key once; only its hash is stored, so it can't be shown again. Use `update --rotate-key` to issue a new one.
+- Limits not given on `create` use the defaults.
+- `delete` removes the client and its limits; its audit logs are kept.
+
 ## Operational Tasks
 
 ```bash
-uv run invoke one-time-tasks.create-client --name "Acme Corp"
 uv run invoke daily-tasks.provider-health-check
 uv run invoke daily-tasks.cleanup-audit-logs --retention-days 60
 uv run invoke dev-tasks.lint
