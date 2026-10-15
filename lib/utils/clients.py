@@ -83,6 +83,8 @@ async def list_clients() -> None:
 def _clean_name(name: str) -> str:
     if not name or not name.strip():
         raise SystemExit("Client name must be provided.")
+    if name.strip().startswith("-"):
+        raise SystemExit("Client name can't start with '-'.")
     return name.strip()
 
 

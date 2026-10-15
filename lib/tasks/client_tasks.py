@@ -18,7 +18,7 @@ def _limits(per_minute, per_hour, per_day, concurrent) -> dict[str, int | None]:
     return {field: int(value) if value is not None else None for field, value in values.items()}
 
 
-@task(help={"name": "Client name", **_LIMIT_HELP})
+@task(positional=[], help={"name": "Client name", **_LIMIT_HELP})
 def create(ctx, name, per_minute=None, per_hour=None, per_day=None, concurrent=None):
     """
     Create a client with rate limits (defaults for any limit not given). Prints the API key once.
@@ -26,7 +26,7 @@ def create(ctx, name, per_minute=None, per_hour=None, per_day=None, concurrent=N
     asyncio.run(clients.create_client(name, **_limits(per_minute, per_hour, per_day, concurrent)))
 
 
-@task(help={"name": "Client name"})
+@task(positional=[], help={"name": "Client name"})
 def get(ctx, name):
     """
     Show a client's status and rate limits. The API key cannot be shown; use update --rotate-key.
@@ -34,7 +34,7 @@ def get(ctx, name):
     asyncio.run(clients.get_client(name))
 
 
-@task(help={"name": "Client name", "activate": "Activate the client", "deactivate": "Deactivate the client", "rotate_key": "Issue a new API key (printed once); the old one stops working", **_LIMIT_HELP})  # fmt: skip
+@task(positional=[], help={"name": "Client name", "activate": "Activate the client", "deactivate": "Deactivate the client", "rotate_key": "Issue a new API key (printed once); the old one stops working", **_LIMIT_HELP})  # fmt: skip
 def update(ctx, name, per_minute=None, per_hour=None, per_day=None, concurrent=None, activate=False, deactivate=False, rotate_key=False):  # fmt: skip
     """
     Change a client's rate limits, status or API key. Takes effect immediately.
@@ -42,7 +42,7 @@ def update(ctx, name, per_minute=None, per_hour=None, per_day=None, concurrent=N
     asyncio.run(clients.update_client(name, activate=activate, deactivate=deactivate, rotate_key=rotate_key, **_limits(per_minute, per_hour, per_day, concurrent)))  # fmt: skip
 
 
-@task(help={"name": "Client name"})
+@task(positional=[], help={"name": "Client name"})
 def delete(ctx, name):
     """
     Delete a client and its rate limits. Takes effect immediately; audit logs are kept.

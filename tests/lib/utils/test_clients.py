@@ -164,3 +164,25 @@ async def test_delete_removes_client_and_evicts_cache(store, redis) -> None:
 async def test_unknown_client_is_reported(store, redis) -> None:
     with pytest.raises(SystemExit, match="not found"):
         await clients.get_client("Nobody")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name, error", [(None, "must be provided"), ("  ", "must be provided"), ("--help", "can't start with '-'"), ("-h", "can't start with '-'")])  # fmt: skip
+async def test_create_rejects_missing_or_flag_like_name(store, redis, name, error) -> None:
+    with pytest.raises(SystemExit, match=error):
+        await clients.create_client(name)
+
+
+@pytest.mark.parametrize("argv", [["clients.create", "--help"], ["clients.create", "-h"], ["clients.delete", "--help"]])
+def test_help_flag_shows_help_instead_of_becoming_the_name(mocker, argv) -> None:
+    from invoke import Program
+
+    from tasks import ns
+
+    create, delete = mocker.patch.object(clients, "create_client"), mocker.patch.object(clients, "delete_client")
+    with pytest.raises(SystemExit) as raised:
+        Program(namespace=ns).run(["invoke", *argv], exit=True)
+
+    assert raised.value.code == 0
+    create.assert_not_called()
+    delete.assert_not_called()
