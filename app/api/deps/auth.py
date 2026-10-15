@@ -3,6 +3,7 @@ import hashlib
 from fastapi import HTTPException, Request, status
 from redis.exceptions import RedisError
 
+from app.config import constants
 from app.config.logger import logger
 from app.db.models import Client
 from app.db.schemas.clients import Client as ClientSchema
@@ -17,7 +18,7 @@ def hash_api_key(api_key: str) -> str:
 
 
 def client_cache_key(hashed_api_key: str) -> str:
-    return f"client:{hashed_api_key}"
+    return f"{constants.REDIS_KEY_PREFIX}:client:{hashed_api_key}"
 
 
 def _extract_api_key(request: Request) -> str:

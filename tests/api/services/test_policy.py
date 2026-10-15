@@ -40,7 +40,7 @@ def _completion_adapter(*, provider: str, model: str, mocker, redis=None, payloa
     async def _is_circuit_open() -> bool:
         if redis is None:
             return False
-        return bool(await redis.exists(f"circuit:{provider}:open"))
+        return bool(await redis.exists(f"core-nest:circuit:{provider}:open"))
 
     async def _acompletion(*, messages, request_params, response_validator=None):
         response_payload = payload or {
@@ -536,10 +536,10 @@ def test_completion_round_robin_key_is_date_scoped() -> None:
     from datetime import UTC, datetime
 
     assert _completion_round_robin_key(datetime(2026, 5, 18, 23, 59, 59, tzinfo=UTC)) == (
-        "llm:routing:completion:rr_counter:2026-05-18"
+        "core-nest:llm:routing:completion:rr_counter:2026-05-18"
     )
     assert _completion_round_robin_key(datetime(2026, 5, 19, 0, 0, 1, tzinfo=UTC)) == (
-        "llm:routing:completion:rr_counter:2026-05-19"
+        "core-nest:llm:routing:completion:rr_counter:2026-05-19"
     )
 
 
@@ -561,7 +561,7 @@ async def test_completion_service_round_robin_respects_circuit_open_and_falls_fo
     request = _request()
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     await fake_redis.set(_completion_round_robin_key(), "1")
-    await fake_redis.set("circuit:google:open", "open")
+    await fake_redis.set("core-nest:circuit:google:open", "open")
     mocker.patch("app.api.services.base.redis_client", fake_redis)
     mocker.patch("app.api.services.base.constants.COMPLETION_PROVIDERS", ("mistral", "google", "openrouter"))
 

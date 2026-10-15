@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+import math
+import time
 from types import SimpleNamespace
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
@@ -13,6 +14,10 @@ from app.db.schemas.clients import Client as ClientSchema
 _DEFAULT_RATE_LIMITS = SimpleNamespace(**constants.DEFAULT_RATE_LIMITS)
 
 
+# (name, seconds, config field)
+_WINDOWS = (("minute", 60, "requests_per_minute"), ("hour", 3600, "requests_per_hour"), ("day", 86400, "requests_per_day"))  # fmt: skip
+
+
 async def _increment_with_expiry(key: str, ttl: int) -> int:
     count = await redis_client.incr(key)
     if count == 1:
@@ -24,52 +29,50 @@ async def _decrement_concurrent_counter(key: str) -> None:
     await redis_client.decr(key)
 
 
+async def _sliding_window(key: str, window: int, now: float) -> tuple[int, int, float]:
+    """Count this request; return (previous window count, current window count, seconds into current window)."""
+    window_start = int(now) // window * window
+    previous = int(await redis_client.get(f"{key}:{window_start - window}") or 0)
+    # kept for two windows: it is read as the "previous" window during the next one
+    current = await _increment_with_expiry(f"{key}:{window_start}", 2 * window)
+    return previous, current, now - window_start
+
+
+def _retry_after(previous: int, current: int, limit: int, elapsed: float, window: int) -> int:
+    if current < limit:  # over only because of the previous window: wait for its weight to decay
+        wait = window * (1 - (limit - current) / previous) - elapsed
+    else:  # wait for this window to end and then decay
+        wait = (window - elapsed) + window * (1 - limit / current)
+    return max(1, math.ceil(wait))
+
+
 async def rate_limiter(request: Request, background_tasks: BackgroundTasks, current_client: ClientSchema.Read = Depends(auth)) -> None:  # fmt: skip
     """
-    Apply rate limiting based on the resolved client schema.
+    Apply sliding-window rate limits based on the resolved client schema.
     """
     request.state.client = current_client
 
     config = current_client.rate_limit_config or _DEFAULT_RATE_LIMITS
     client_id = str(current_client.id)
-    now = datetime.now(UTC)
+    now = time.time()
 
     try:
-        if config.requests_per_minute is not None:
-            minute_key = f"rate_limit:{client_id}:minute:{now.strftime('%Y%m%d%H%M')}"
-            count = await _increment_with_expiry(minute_key, 60)
-            if count > config.requests_per_minute:
-                retry_after = 60 - now.second
+        for name, window, field in _WINDOWS:
+            limit = getattr(config, field)
+            if limit is None:
+                continue
+            # previous window weighted by how much of it still overlaps the last `window` seconds
+            previous, current, elapsed = await _sliding_window(f"{constants.REDIS_KEY_PREFIX}:rate_limit:{client_id}:{name}", window, now)  # fmt: skip
+            if previous * (1 - elapsed / window) + current > limit:
+                retry_after = _retry_after(previous, current, limit, elapsed, window)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Too many requests per minute - Try Again after {retry_after} seconds",
-                    headers={"Retry-After": f"{retry_after}"},
-                )
-
-        if config.requests_per_hour is not None:
-            hour_key = f"rate_limit:{client_id}:hour:{now.strftime('%Y%m%d%H')}"
-            count = await _increment_with_expiry(hour_key, 3600)
-            if count > config.requests_per_hour:
-                retry_after = 3600 - (now.minute * 60 + now.second)
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Too many requests per hour - Try Again after {retry_after} seconds",
-                    headers={"Retry-After": f"{retry_after}"},
-                )
-
-        if config.requests_per_day is not None:
-            day_key = f"rate_limit:{client_id}:day:{now.strftime('%Y%m%d')}"
-            count = await _increment_with_expiry(day_key, 86400)
-            if count > config.requests_per_day:
-                retry_after = 86400 - (now.hour * 3600 + now.minute * 60 + now.second)
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Too many requests per day - Try Again after {retry_after} seconds",
+                    detail=f"Too many requests per {name} - Try Again after {retry_after} seconds",
                     headers={"Retry-After": f"{retry_after}"},
                 )
 
         if config.concurrent_requests_limit is not None:
-            concurrent_key = f"concurrent:{client_id}"
+            concurrent_key = f"{constants.REDIS_KEY_PREFIX}:concurrent:{client_id}"
             current_concurrent_count = await redis_client.incr(concurrent_key)
             await redis_client.expire(concurrent_key, 300)
 

@@ -22,9 +22,9 @@ services:
         sync: false
       - key: SUPABASE_DB_PASSWORD
         sync: false
-      - key: REDIS_URL
+      - key: UPSTASH_REDIS_REST_URL
         sync: false
-      - key: REDIS_PASSWORD
+      - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
       - key: GOOGLE_API_KEY
         sync: false

@@ -15,7 +15,7 @@ from app.config import constants
 from app.config.logger import logger
 from lib.llm.errors import retry_after
 
-_COMPLETION_ROUND_ROBIN_KEY_PREFIX = "llm:routing:completion:rr_counter"
+_COMPLETION_ROUND_ROBIN_KEY_PREFIX = f"{constants.REDIS_KEY_PREFIX}:llm:routing:completion:rr_counter"
 _COMPLETION_ROUND_ROBIN_TTL_SECONDS = 36 * 60 * 60
 _REQUEST_DEADLINE_SECONDS = 90
 

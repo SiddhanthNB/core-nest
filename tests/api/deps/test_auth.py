@@ -146,7 +146,7 @@ async def test_auth_cache_hit_slides_ttl(mocker) -> None:
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     mocker.patch("lib.cache.store.redis_client", fake_redis)
     request = _request_with_auth()
-    cache_key = f"client:{hashlib.sha256(b'secret-key').hexdigest()}"
+    cache_key = f"core-nest:client:{hashlib.sha256(b'secret-key').hexdigest()}"
     cached_schema = ClientSchema.Read.model_validate(_client_payload())
     await fake_redis.set(cache_key, cached_schema.model_dump_json(), ex=CACHE_TTL)
     await fake_redis.expire(cache_key, 10)

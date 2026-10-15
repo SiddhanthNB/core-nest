@@ -209,8 +209,11 @@ Intentional differences:
 ## Auth, Rate Limits, and Audit
 
 - bearer-token client auth (keys stored hashed, cached in Redis with a 10-minute sliding TTL)
-- Redis-backed rate limiting (per minute, hour, day, and concurrent); clients without limits get the defaults (60/min, 1000/hour, 5000/day, 5 concurrent)
+- sliding-window rate limiting (per minute, hour, day) plus a concurrency cap; clients without limits get the defaults (60/min, 1000/hour, 5000/day, 5 concurrent)
 - Redis-backed provider circuit state
+- Redis is Upstash over TLS; every key is prefixed `core-nest:` (the database is shared)
+- if Redis is unreachable, rate limits, circuits and the auth cache keep working on an in-memory copy (one worker, so it stays exact); Redis is retried every 30s
+- request bodies over 2 MB are rejected with `413`
 - Postgres audit logging, including provider attempt stacks; skipped in development
 
 ## Observability
@@ -259,8 +262,9 @@ WEB_CONCURRENCY=2
 SUPABASE_DB_PASSWORD=replace-me
 SUPABASE_DB_URL=postgresql://user:[YOUR-PASSWORD]@host:5432/db
 
-REDIS_PASSWORD=replace-me
-REDIS_URL=redis://default:[YOUR-PASSWORD]@host:6379/0
+# Upstash Redis (same vars as its REST API); the app connects over TLS: rediss://default:<token>@<host>:6379
+UPSTASH_REDIS_REST_URL=https://<your-db>.upstash.io
+UPSTASH_REDIS_REST_TOKEN=replace-me
 
 # defaults to True: use LiteLLM's bundled model cost map, no network fetch at startup
 LITELLM_LOCAL_MODEL_COST_MAP=True
@@ -309,12 +313,17 @@ uv run invoke clients.list
 ## Operational Tasks
 
 ```bash
-uv run invoke daily-tasks.provider-health-check
 uv run invoke daily-tasks.cleanup-audit-logs --retention-days 60
 uv run invoke dev-tasks.lint
 ```
 
-The health check writes Markdown to `GITHUB_STEP_SUMMARY` when set, and runs daily via GitHub Actions.
+Provider health check (daily via GitHub Actions) calls the deployed API as an external client, once per enabled provider plus `core-nest/auto`. It imports nothing from the app and needs only `CORE_NEST_API_KEY` (`CORE_NEST_URL` defaults to prod):
+
+```bash
+CORE_NEST_API_KEY=... uv run scripts/provider_health.py
+```
+
+It writes Markdown to `GITHUB_STEP_SUMMARY` when set and exits non-zero on any failure.
 
 ## Deployment
 

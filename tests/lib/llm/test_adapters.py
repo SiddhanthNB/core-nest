@@ -179,7 +179,7 @@ async def test_base_adapter_client_error_does_not_open_circuit(mocker) -> None:
 
     assert adapter._completion_router.acompletion.await_count == 5
     assert not await adapter.is_circuit_open()
-    assert not await redis.exists(f"circuit:{adapter._provider_name}:failures")
+    assert not await redis.exists(f"core-nest:circuit:{adapter._provider_name}:failures")
 
 
 @pytest.mark.asyncio
@@ -362,3 +362,17 @@ async def test_base_adapter_runs_each_retry_in_its_own_span(mocker) -> None:
     assert [(span.attributes["retry.attempt"], span.attributes["outcome"], span.attributes.get("error.type")) for span in attempts] == expected  # fmt: skip
     assert {(span.attributes["gen_ai.provider.name"], span.attributes["gen_ai.request.model"]) for span in attempts} == {("groq", adapter._completion_model)}  # fmt: skip
     assert [span.status.status_code for span in attempts] == [StatusCode.ERROR, StatusCode.ERROR, StatusCode.OK]
+
+
+@pytest.mark.asyncio
+async def test_reset_circuit_is_one_command_and_reports_prior_state(mocker) -> None:
+    redis = await _redis()
+    adapter = _BaseAdapterUnderTest(redis=redis, request=_request())
+    exists = mocker.spy(redis, "exists")
+
+    assert await adapter._reset_circuit() is False
+    await redis.set(adapter._circuit_key("failures"), "2")
+    assert await adapter._reset_circuit() is True
+
+    assert exists.call_count == 0
+    assert not await redis.exists(adapter._circuit_key("failures"))

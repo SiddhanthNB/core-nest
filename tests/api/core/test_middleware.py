@@ -261,3 +261,26 @@ async def test_http_exception_headers_reach_client() -> None:
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "30"
     assert response.json()["error"]["message"] == "Too many requests"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("size, expected_status", [(10, 200), (3 * 1024 * 1024, 413)])
+async def test_oversized_body_is_rejected_before_reading(size, expected_status) -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.api.core.middleware import register_middleware
+
+    app = FastAPI()
+    register_middleware(app)
+
+    @app.post("/echo")
+    async def _echo():
+        return {"ok": True}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post("/echo", content=b"x" * size)
+
+    assert response.status_code == expected_status
+    assert response.headers["X-Request-ID"]
+    if expected_status == 413:
+        assert response.json()["error"]["code"] == "payload_too_large"

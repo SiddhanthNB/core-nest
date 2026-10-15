@@ -100,7 +100,7 @@ async def test_adapter_retries_429_then_succeeds(redis, provider_api, sleeps) ->
     assert result.choices[0].message.content == "after retry"
     assert route.call_count == 2
     assert len(sleeps) == 1
-    assert not await redis.exists("circuit:groq:failures")
+    assert not await redis.exists("core-nest:circuit:groq:failures")
 
 
 @pytest.mark.asyncio
@@ -125,7 +125,7 @@ async def test_adapter_400_does_not_retry_or_open_circuit(redis, provider_api, s
     assert route.call_count == 5
     assert sleeps == []
     assert not await adapter.is_circuit_open()
-    assert not await redis.exists("circuit:groq:failures")
+    assert not await redis.exists("core-nest:circuit:groq:failures")
 
 
 @pytest.mark.asyncio
@@ -157,8 +157,8 @@ async def test_service_falls_back_to_next_provider_on_5xx(mocker, redis, provide
     attempts = request.state.audit_context["response_meta"]["provider_attempts"]
     assert [(attempt["provider"], attempt["status"]) for attempt in attempts] == [("groq", "failed"), ("mistral", "succeeded")]  # fmt: skip
     assert attempts[0]["error"] == "ServiceUnavailableError"
-    assert await redis.get("circuit:groq:failures") == "1"
-    assert not await redis.exists("circuit:mistral:failures")
+    assert await redis.get("core-nest:circuit:groq:failures") == "1"
+    assert not await redis.exists("core-nest:circuit:mistral:failures")
 
 
 @pytest.mark.asyncio
@@ -184,7 +184,7 @@ async def test_adapter_401_counts_toward_circuit_without_retrying(redis, provide
 
     assert route.call_count == 1
     assert sleeps == []
-    assert await redis.get("circuit:groq:failures") == "1"
+    assert await redis.get("core-nest:circuit:groq:failures") == "1"
 
 
 @pytest.mark.asyncio

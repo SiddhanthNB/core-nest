@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic==1.16.2",
     "duo-orm-preview",
+    "fakeredis==2.34.1",
     "fastapi==0.115.12",
     "httpx==0.28.1",
     "invoke==2.2.0",
@@ -53,7 +54,6 @@ select = ["E4", "E7", "E9", "F", "I", "UP"]
 
 [dependency-groups]
 dev = [
-    "fakeredis>=2.34.1",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "pytest-mock>=3.15.1",

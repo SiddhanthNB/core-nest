@@ -8,18 +8,11 @@ on:
 jobs:
   health-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
-      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-      CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
-      HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      REDIS_URL: ${{ secrets.REDIS_URL }}
-      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      # external client against the deployed API; provider/DB/Redis secrets live only on Render
+      CORE_NEST_URL: https://core-nest.onrender.com
+      CORE_NEST_API_KEY: ${{ secrets.CORE_NEST_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -27,13 +20,5 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v8.1.0
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: uv sync
-
       - name: Run provider health check
-        run: uv run invoke daily-tasks.provider-health-check
+        run: uv run scripts/provider_health.py

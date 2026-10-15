@@ -17,6 +17,16 @@ from app.config import constants
 from app.config.logger import logger
 from app.db.models.audit_logs import AuditLog
 
+from ._helpers import _openai_error
+
+# requests are rejected before their body is read; generous for long LLM prompts
+_MAX_BODY_BYTES = 2 * 1024 * 1024
+
+
+def _payload_too_large() -> JSONResponse:
+    message = f"Request body exceeds {_MAX_BODY_BYTES // (1024 * 1024)} MB"
+    return JSONResponse(content=_openai_error(message, type_="invalid_request_error", code="payload_too_large"), status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)  # fmt: skip
+
 
 class _APILoggerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
@@ -24,7 +34,9 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
         span_context = trace.get_current_span().get_span_context()
         request_id = str(uuid.UUID(int=span_context.trace_id) if span_context.is_valid else uuid.uuid4())
         request.state.request_id = request_id
-        request_body = await self._request_json(request)
+        content_length = request.headers.get("content-length", "")
+        too_large = content_length.isdigit() and int(content_length) > _MAX_BODY_BYTES
+        request_body = {} if too_large else await self._request_json(request)
         request.state.audit_context = self._build_audit_context(
             request=request,
             request_id=request_id,
@@ -34,7 +46,7 @@ class _APILoggerMiddleware(BaseHTTPMiddleware):
         logger.log(log_level, f"[method: {request.method}] [path: {request.url.path}] Request started")
 
         try:
-            response = await call_next(request)
+            response = _payload_too_large() if too_large else await call_next(request)
         except Exception as exc:
             logger.error(
                 f"[method: {request.method}] [path: {request.url.path}] "

@@ -1,7 +1,7 @@
 import os
 import tomllib
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
 import yaml
 from dotenv import load_dotenv
@@ -24,10 +24,12 @@ WEB_CONCURRENCY = int(os.getenv("WEB_CONCURRENCY", 1))
 SUPABASE_DB_PASSWORD = os.getenv("SUPABASE_DB_PASSWORD")
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL").replace("[YOUR-PASSWORD]", quote_plus(SUPABASE_DB_PASSWORD))
 
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-REDIS_URL = os.getenv("REDIS_URL").replace("[YOUR-PASSWORD]", quote_plus(REDIS_PASSWORD))
-
-GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
+# Upstash Redis, same env vars as the REST API; redis-py connects over TLS (rediss://) with the token as password
+UPSTASH_REDIS_REST_URL = os.getenv("UPSTASH_REDIS_REST_URL")
+UPSTASH_REDIS_REST_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN")
+REDIS_URL = f"rediss://default:{quote_plus(UPSTASH_REDIS_REST_TOKEN)}@{urlparse(UPSTASH_REDIS_REST_URL).hostname}:6379"
+# every key is namespaced; the Upstash database is shared with other projects
+REDIS_KEY_PREFIX = "core-nest"
 
 # applied to new clients and to any client without a rate-limit config row
 DEFAULT_RATE_LIMITS = {

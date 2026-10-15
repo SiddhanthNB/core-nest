@@ -101,8 +101,11 @@ class BaseAdapter:
     def _supports_embedding(self) -> bool:
         return self._embedding_router is not None and self._embedding_model is not None
 
+    def _circuit_key(self, name: str) -> str:
+        return f"{constants.REDIS_KEY_PREFIX}:circuit:{self._provider_name}:{name}"
+
     async def is_circuit_open(self) -> bool:
-        return bool(await self.redis.exists(f"circuit:{self._provider_name}:open"))
+        return bool(await self.redis.exists(self._circuit_key("open")))
 
     async def acompletion(self, *, messages: list[dict[str, Any]], request_params: Mapping[str, Any], response_validator: Any | None = None) -> Any:  # fmt: skip
         if not self._supports_completion():
@@ -188,21 +191,18 @@ class BaseAdapter:
         return api_key
 
     async def _record_failure(self) -> bool:
-        failure_key = f"circuit:{self._provider_name}:failures"
+        failure_key = self._circuit_key("failures")
         failures = int(await self.redis.incr(failure_key))
         await self.redis.expire(failure_key, _CIRCUIT_FAILURE_TTL_SECONDS)
         if failures >= _CIRCUIT_FAILURE_THRESHOLD:
-            await self.redis.set(f"circuit:{self._provider_name}:open", "open", ex=_CIRCUIT_COOLDOWN_SECONDS)
+            await self.redis.set(self._circuit_key("open"), "open", ex=_CIRCUIT_COOLDOWN_SECONDS)
             await self.redis.delete(failure_key)
             return True
         return False
 
     async def _reset_circuit(self) -> bool:
-        failure_key = f"circuit:{self._provider_name}:failures"
-        open_key = f"circuit:{self._provider_name}:open"
-        had_state = bool(await self.redis.exists(failure_key) or await self.redis.exists(open_key))
-        await self.redis.delete(failure_key, open_key)
-        return had_state
+        # DEL returns how many keys existed, so one command both clears and reports prior state
+        return bool(await self.redis.delete(self._circuit_key("failures"), self._circuit_key("open")))
 
     def _wait_for_retry(self, retry_state: Any) -> float:
         wait = self._retry_wait_seconds(retry_state)
